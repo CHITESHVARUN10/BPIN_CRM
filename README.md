@@ -48,8 +48,8 @@ Edit `backend/.env`:
 | `SESSION_SECRET` | Already generated; rotate for production |
 | `CLOUDINARY_*` | Your Cloudinary cloud/key/secret — **required for photo upload** (app still works without photos if blank) |
 | `VAPID_*` | Optional: `npx web-push generate-vapid-keys` — enables real push notifications; in-app bell works without it |
-| `ADMIN_EMAIL/PASSWORD` | Seeded admin login |
-| `TECH_DEFAULT_PASSWORD` | Password for the 13 seeded engineers (admins can reset per user in the app) |
+| `ADMIN_EMAIL/PASSWORD` | Super-admin email + the password to give seeded admins (choose your own; values never live in this repo) |
+| `TECH_DEFAULT_PASSWORD` | Login password for the 13 seeded engineers — pick your own; admins can reset per user in the app |
 
 Seed (idempotent, safe to re-run):
 

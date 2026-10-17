@@ -62,4 +62,4 @@ Scope: everything the admin asked to verify — admin creates user, assignment h
 | N6 | The agent-browser harness relaunched mid-test a few times (cookie drops), noisy but attributed to the harness, not the app (verified via one-shot command chains). |
 
 Test assets: screenshots in `test-artifacts/`.
-Demo data left in local DB: user **ravi.test@blaupunktcar.in** (Test@1234), assignment "Mrs. Ananya Das" (done), case `17102026-0001` (closed). Test products cleaned up.
+Demo data left in local DB: user **ravi.test@blaupunktcar.in** (password withheld from the repo), assignment "Mrs. Ananya Das" (done), case `17102026-0001` (closed). Test products cleaned up.

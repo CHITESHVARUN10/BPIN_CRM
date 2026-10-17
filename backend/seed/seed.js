@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import XLSX from 'xlsx'
 import mongoose from 'mongoose'
@@ -7,6 +8,23 @@ import { connectDB } from '../db.js'
 import User from '../models/User.js'
 import Product from '../models/Product.js'
 import Problem from '../models/Problem.js'
+
+// Never hardcode seed passwords — if the env var is missing, fall back to a
+// random value that is printed ONCE in the console of the seeding run.
+const fallbackAdminPassword = crypto.randomBytes(12).toString('base64url')
+const fallbackTechPassword = crypto.randomBytes(12).toString('base64url')
+let adminFallbackUsed = false
+let techFallbackUsed = false
+const adminPassword = () => {
+  const value = process.env.ADMIN_PASSWORD
+  if (!value) adminFallbackUsed = true
+  return value || fallbackAdminPassword
+}
+const techPassword = () => {
+  const value = process.env.TECH_DEFAULT_PASSWORD
+  if (!value) techFallbackUsed = true
+  return value || fallbackTechPassword
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -71,7 +89,7 @@ async function seedEngineers() {
       continue
     }
     const user = new User({ name, email, phone, region, role: 'technician' })
-    await user.setPassword(process.env.TECH_DEFAULT_PASSWORD || 'Bpin@123')
+    await user.setPassword(techPassword())
     await user.save()
     created++
   }
@@ -109,7 +127,7 @@ async function seedAdmin() {
     return existing.email
   }
   const admin = new User({ name: 'BPIN Admin', email, role: 'admin', superAdmin: true, active: true })
-  await admin.setPassword(process.env.ADMIN_PASSWORD || 'Admin@123')
+  await admin.setPassword(adminPassword())
   await admin.save()
   return email
 }
@@ -125,7 +143,7 @@ const ADMIN_ACCOUNTS = [
 ]
 
 async function seedStaffAdmins() {
-  const password = process.env.ADMIN_PASSWORD || 'Admin@123'
+  const password = adminPassword()
   let created = 0
   for (const account of ADMIN_ACCOUNTS) {
     const email = account.email.toLowerCase()
@@ -162,6 +180,8 @@ async function main() {
       problems,
       admin,
     })
+    if (adminFallbackUsed) console.log(`ADMIN_PASSWORD was not set — used one-off password for admins: ${fallbackAdminPassword}`)
+    if (techFallbackUsed) console.log(`TECH_DEFAULT_PASSWORD was not set — used one-off password for engineers: ${fallbackTechPassword}`)
     await mongoose.disconnect()
     console.log('Seed complete')
   } catch (err) {
