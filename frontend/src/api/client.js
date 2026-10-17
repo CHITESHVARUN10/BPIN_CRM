@@ -1,9 +1,10 @@
 import axios from 'axios'
 
-// Relative '/api' works with the Vite dev proxy and when the Express server
-// serves the built app. Point VITE_API_URL at your backend (e.g.
-// https://your-api.example.com/api) when the frontend is hosted separately (Vercel).
-const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '')
+// The API is always reached same-origin: locally through the Vite dev proxy,
+// in production through the Vercel rewrite that proxies /api to the Render
+// backend. Same-origin keeps the session cookie first-party (required for
+// Safari/iOS, which block all third-party cookies).
+const API_BASE = '/api'
 
 const client = axios.create({
   baseURL: API_BASE,
