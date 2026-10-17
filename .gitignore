@@ -1,0 +1,30 @@
+# ── Company data (never commit) ──────────────────────────────────
+csvs/
+
+# ── Command Code workspace state (never commit) ──────────────────
+.commandcode/
+
+# ── Secrets (never commit; .env.example IS tracked) ──────────────
+.env
+.env.*
+!.env.example
+
+# ── Node module trees (both apps) ────────────────────────────────
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# ── Build output ─────────────────────────────────────────────────
+frontend/dist/
+dist/
+
+# ── Test artifacts & scratch ─────────────────────────────────────
+test-artifacts/
+
+# ── OS junk ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+npm-debug.log*

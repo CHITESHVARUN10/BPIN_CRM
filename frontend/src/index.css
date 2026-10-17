@@ -1,0 +1,177 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-accent: #2f96d4;
+}
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-zinc-50 text-zinc-900 font-sans transition-colors;
+  }
+  .dark body {
+    @apply bg-zinc-950 text-zinc-100;
+  }
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-xl bg-zinc-900 text-white text-sm font-medium transition active:scale-[0.985] hover:bg-zinc-800 disabled:opacity-45 disabled:pointer-events-none select-none;
+  }
+  .dark .btn {
+    background-color: var(--color-zinc-100);
+    color: var(--color-zinc-900);
+  }
+  .dark .btn:hover {
+    background-color: var(--color-zinc-300);
+  }
+  .btn-ghost {
+    @apply bg-transparent text-zinc-800 hover:bg-zinc-100;
+  }
+  .dark .btn-ghost {
+    background-color: transparent;
+    color: var(--color-zinc-300);
+  }
+  .dark .btn-ghost:hover {
+    background-color: var(--color-zinc-800);
+  }
+  .btn-outline {
+    @apply bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50;
+  }
+  .dark .btn-outline {
+    background-color: var(--color-zinc-900);
+    color: var(--color-zinc-100);
+    border-color: var(--color-zinc-700);
+  }
+  .dark .btn-outline:hover {
+    background-color: var(--color-zinc-800);
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700;
+  }
+  .dark .btn-danger {
+    background-color: var(--color-red-600);
+    color: white;
+  }
+  .btn-sm {
+    @apply min-h-[36px] px-3 text-[13px] rounded-lg;
+  }
+  .input {
+    @apply w-full min-h-[44px] px-3 py-2 rounded-xl border border-zinc-200 bg-white text-[15px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/70 transition;
+  }
+  .dark .input {
+    background-color: var(--color-zinc-900);
+    border-color: var(--color-zinc-700);
+    color: var(--color-zinc-100);
+    --tw-placeholder-color: var(--color-zinc-500);
+  }
+  .dark .input::placeholder {
+    color: var(--color-zinc-500);
+  }
+  select.input {
+    @apply appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%2371717a%22%20d%3D%22M6%209L1.5%204.5h9z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:12px] bg-[right_0.9rem_center] bg-no-repeat pr-9;
+  }
+  .label {
+    @apply block text-sm font-medium text-zinc-700 mb-1.5;
+  }
+  .dark .label {
+    color: var(--color-zinc-300);
+  }
+  .card {
+    @apply bg-white border border-zinc-200 rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.04)];
+  }
+  .dark .card {
+    background-color: var(--color-zinc-900);
+    border-color: var(--color-zinc-800);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+  .chip {
+    @apply inline-flex items-center px-2 py-[3px] rounded-md bg-zinc-100 text-zinc-600 text-[11px] font-medium tracking-wide whitespace-nowrap;
+  }
+  .dark .chip {
+    background-color: var(--color-zinc-800);
+    color: var(--color-zinc-300);
+  }
+  .chip-strong {
+    @apply bg-zinc-900 text-white;
+  }
+  .dark .chip-strong {
+    background-color: var(--color-zinc-100);
+    color: var(--color-zinc-900);
+  }
+  .chip-open {
+    @apply bg-accent/10 text-accent;
+  }
+  .link-accent {
+    @apply text-accent hover:text-accent/80 transition;
+  }
+  .section-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.09em] text-zinc-500;
+  }
+  .skeleton {
+    @apply bg-zinc-100 animate-pulse rounded-xl;
+  }
+  .dark .skeleton {
+    background-color: var(--color-zinc-800);
+  }
+  .divider {
+    @apply h-px bg-zinc-100;
+  }
+  .dark .divider {
+    background-color: var(--color-zinc-800);
+  }
+  .navlink {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 transition;
+  }
+  .dark .navlink {
+    color: var(--color-zinc-400);
+  }
+  .dark .navlink:hover {
+    background-color: var(--color-zinc-800);
+    color: var(--color-zinc-100);
+  }
+  .navlink-active {
+    @apply bg-zinc-900 text-white hover:bg-zinc-900 hover:text-white;
+  }
+  .dark .navlink-active {
+    background-color: var(--color-zinc-800);
+    color: var(--color-zinc-100);
+  }
+}
+
+/* Dark-mode remapping of shared utilities — must stay UNLAYERED so it wins
+   over Tailwind's utilities cascade layer. */
+.dark .text-zinc-900 { color: var(--color-zinc-100); }
+.dark .text-zinc-800 { color: var(--color-zinc-200); }
+.dark .text-zinc-700 { color: var(--color-zinc-300); }
+.dark .text-zinc-600 { color: var(--color-zinc-400); }
+.dark .bg-white { background-color: var(--color-zinc-900); }
+.dark .bg-zinc-50 { background-color: var(--color-zinc-950); }
+.dark .bg-zinc-100 { background-color: var(--color-zinc-800); }
+.dark .border-zinc-200 { border-color: var(--color-zinc-800); }
+.dark .border-zinc-100 { border-color: var(--color-zinc-800); }
+.dark .divide-zinc-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--color-zinc-800); }
+.dark .hover\:bg-zinc-50:hover { background-color: var(--color-zinc-800); }
+.dark .hover\:bg-zinc-100:hover { background-color: var(--color-zinc-800); }
+.dark .hover\:text-zinc-900:hover { color: var(--color-zinc-100); }
+.dark .text-red-600 { color: var(--color-red-400); }
+.dark .bg-amber-50\/50 { background-color: color-mix(in oklab, var(--color-amber-950) 50%, transparent); }
+.dark .border-amber-200 { border-color: var(--color-amber-900); }
+.dark .bg-red-50 { background-color: color-mix(in oklab, var(--color-red-950) 60%, transparent); }
+.dark .border-red-100 { border-color: var(--color-red-900); }
+.dark .text-red-700 { color: var(--color-red-300); }
+.dark .bg-red-600 { background-color: var(--color-red-600); }
+
+.dark .recharts-area-curve { stroke: var(--color-zinc-300); }
+.dark .recharts-area-area { fill: var(--color-zinc-800); }
+.dark .recharts-cartesian-axis-tick text { fill: var(--color-zinc-500); }
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip { background: var(--color-zinc-900) !important; border-color: var(--color-zinc-700) !important; color: var(--color-zinc-100) !important; }

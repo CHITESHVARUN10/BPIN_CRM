@@ -1,0 +1,13 @@
+{
+  "name": "BPIN Service",
+  "short_name": "BPIN",
+  "description": "Blaupunkt India service engineer portal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#171717",
+  "icons": [
+    { "src": "/logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
