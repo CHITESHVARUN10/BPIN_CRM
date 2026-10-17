@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 
 function applyTheme(theme) {
-  const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const dark = theme === 'dark'
   document.documentElement.classList.toggle('dark', dark)
 }
 
 export default function ThemeToggle({ className = '' }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem('bpin:theme') || 'system')
+  const [theme, setTheme] = useState(() => localStorage.getItem('bpin:theme') || 'light')
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
 
   useEffect(() => {
