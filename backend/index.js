@@ -93,6 +93,21 @@ async function main() {
   app.use('/api/reports', reportRoutes)
   app.use('/api/users', userRoutes)
   app.use('/api/logs', logRoutes)
+  app.get('/api/health', async (req, res) => {
+    let db = 'up'
+    try {
+      await mongoose.connection.db.admin().command({ ping: 1 })
+    } catch (err) {
+      db = 'down'
+    }
+    res.status(db === 'up' ? 200 : 503).json({
+      ok: db === 'up',
+      service: 'bpin-crm-backend',
+      db,
+      uptimeSec: Math.floor(process.uptime()),
+      time: new Date().toISOString(),
+    })
+  })
   app.use('/api', (req, res) => res.status(404).json({ message: 'Not found' }))
 
   const dist = path.join(__dirname, '..', 'frontend', 'dist')
