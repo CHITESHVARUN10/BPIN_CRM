@@ -14,7 +14,7 @@ const loginLimiter = rateLimit({
 
 function out(user) {
   if (!user) return null
-  return { _id: user._id, name: user.name, email: user.email, phone: user.phone, region: user.region, role: user.role }
+  return { _id: user._id, name: user.name, email: user.email, phone: user.phone, region: user.region, role: user.role, superAdmin: !!user.superAdmin }
 }
 
 router.post('/login', loginLimiter, (req, res, next) => {
