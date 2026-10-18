@@ -21,6 +21,9 @@ dist/
 # ── Test artifacts & scratch ─────────────────────────────────────
 test-artifacts/
 
+# ── Internal handoff doc (never commit) ──────────────────────────
+HANDOFF.md
+
 # ── OS junk ──────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
