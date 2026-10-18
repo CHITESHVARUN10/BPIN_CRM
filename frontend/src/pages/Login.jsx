@@ -30,7 +30,7 @@ export default function Login() {
       push(`Welcome, ${user.name.split(' ')[0]}`)
       navigate('/', { replace: true })
     } catch (err) {
-      setError(err.message || 'Login failed')
+      setError(err.response?.data?.message || err.message || 'Login failed')
     } finally {
       setBusy(false)
     }
