@@ -33,6 +33,7 @@ export default function MediaUploader({
 }) {
   const cameraRef = useRef(null)
   const galleryRef = useRef(null)
+  const videoCameraRef = useRef(null)
   const videoRef = useRef(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -104,10 +105,16 @@ export default function MediaUploader({
       <div className="divider my-3" />
 
       {videos.length === 0 ? (
-        <button type="button" className="btn btn-outline btn-sm w-full" onClick={() => videoRef.current?.click()}>
-          <Video size={15} />
-          Add video
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" className="btn btn-outline btn-sm flex-1" onClick={() => videoCameraRef.current?.click()}>
+            <Video size={15} />
+            Record video
+          </button>
+          <button type="button" className="btn btn-outline btn-sm flex-1" onClick={() => videoRef.current?.click()}>
+            <Video size={15} />
+            Choose video
+          </button>
+        </div>
       ) : (
         <div className="relative rounded-xl overflow-hidden border border-zinc-200 bg-black">
           <video src={videos[0].previewUrl} controls playsInline className="w-full max-h-64" />
@@ -116,9 +123,10 @@ export default function MediaUploader({
           </button>
         </div>
       )}
+      <input ref={videoCameraRef} type="file" accept="video/*" capture="environment" hidden onChange={(e) => { addVideo(e.target.files); e.target.value = '' }} />
       <input ref={videoRef} type="file" accept="video/mp4,video/webm,video/quicktime,video/*" hidden onChange={(e) => { addVideo(e.target.files); e.target.value = '' }} />
       <p className="mt-2 text-[12px] text-zinc-400">
-        1 video · up to {videoMaxMB}MB (optional)
+        1 video · up to {videoMaxMB}MB (optional) — recording opens the camera app, no extra permission needed
       </p>
 
       {error ? <p className="mt-1 text-[12px] text-red-600">{error}</p> : null}
