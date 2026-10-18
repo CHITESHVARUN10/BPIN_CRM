@@ -1,5 +1,14 @@
 import mongoose from 'mongoose'
 
+// A stored media item. `kind` marks videos explicitly; legacy items saved
+// before video support have no `kind` and are treated as images by clients.
+const mediaItem = {
+  url: { type: String, required: true },
+  publicId: { type: String, required: true },
+  kind: { type: String, enum: ['image', 'video'], default: 'image' },
+  contentType: { type: String },
+}
+
 const serviceRecordSchema = new mongoose.Schema(
   {
     tokenNo: { type: String, required: true, unique: true },
@@ -24,8 +33,8 @@ const serviceRecordSchema = new mongoose.Schema(
       model: { type: String, trim: true },
     },
     images: {
-      type: [{ url: { type: String, required: true }, publicId: { type: String, required: true } }],
-      validate: [(arr) => arr.length <= 4, 'Max 4 images'],
+      type: [mediaItem],
+      validate: [(arr) => arr.length <= 5, 'Max 4 photos and 1 video'],
     },
     status: { type: String, enum: ['open', 'closed'], default: 'open' },
     closure: {
@@ -34,7 +43,7 @@ const serviceRecordSchema = new mongoose.Schema(
         closedByRole: { type: String, trim: true },
         closedByName: { type: String, trim: true },
         workDone: { type: String, trim: true },
-        images: [{ url: { type: String, required: true }, publicId: { type: String, required: true } }],
+        images: [mediaItem],
         closedAt: { type: Date },
       },
       default: null,
@@ -49,7 +58,7 @@ const serviceRecordSchema = new mongoose.Schema(
           otherDescription: { type: String, trim: true },
         },
         notes: { type: String, trim: true },
-        images: [{ url: { type: String, required: true }, publicId: { type: String, required: true } }],
+        images: [mediaItem],
         closes: { type: Boolean, default: false },
         filedAt: { type: Date, default: Date.now },
       },

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Check, Loader2 } from 'lucide-react'
 import api from '../api/client.js'
-import ImageUploader from '../components/ImageUploader.jsx'
+import MediaUploader from '../components/MediaUploader.jsx'
 import { EmptyState, Field, SkeletonRows } from '../components/ui.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 
@@ -15,6 +15,7 @@ export default function FollowUp() {
   const [problems, setProblems] = useState([])
   const [form, setForm] = useState({ customerReport: '', problemId: '', isOther: false, problemOtherTitle: '', problemOtherDescription: '', notes: '' })
   const [images, setImages] = useState([])
+  const [videos, setVideos] = useState([])
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(null)
@@ -63,6 +64,7 @@ export default function FollowUp() {
       }
       fd.append('notes', form.notes.trim())
       for (const img of images) fd.append('images', img.file)
+      for (const vid of videos) fd.append('videos', vid.file)
 
       const res = await api.post(`/records/${id}/follow-up`, fd)
       setDone(res.data.record)
@@ -179,7 +181,7 @@ export default function FollowUp() {
       </div>
 
       <div className="card p-4">
-        <ImageUploader value={images} onChange={setImages} max={4} />
+        <MediaUploader images={images} onImagesChange={setImages} videos={videos} onVideosChange={setVideos} />
       </div>
 
       <button type="submit" className="btn w-full !min-h-[52px] !text-[15px]" disabled={submitting}>

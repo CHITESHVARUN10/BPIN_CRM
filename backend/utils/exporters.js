@@ -8,7 +8,7 @@ import { formatDateLabel } from './dates.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LOGO_PATH = path.join(__dirname, '..', 'assets', 'BL Logo.png')
 
-const CSV_HEADER = ['S.No', 'Token No', 'Date', 'Technician', 'Region', 'Brand', 'Model (SKU)', 'Description', 'Serial Number', 'Vehicle', 'Customer Reported', 'Problem', 'Details', 'Images count']
+const CSV_HEADER = ['S.No', 'Token No', 'Date', 'Technician', 'Region', 'Brand', 'Model (SKU)', 'Description', 'Serial Number', 'Vehicle', 'Customer Reported', 'Problem', 'Details', 'Images count', 'Videos count']
 
 function recordBrand(record) {
   return record.productSnapshot?.category === 'ROCKFORD FOSGATE' ? 'Rockford Fosgate' : 'Blaupunkt'
@@ -19,6 +19,8 @@ export function recordCsvRow(record, index) {
     ? `Other: ${record.problem?.otherDescription || ''}${record.notes ? ` | ${record.notes}` : ''}`
     : (record.notes || '')
   const vehicle = [record.vehicle?.make, record.vehicle?.model].filter(Boolean).join(' ')
+  const photos = (record.images || []).filter((m) => m.kind !== 'video').length
+  const videos = (record.images || []).filter((m) => m.kind === 'video').length
   return [
     String(index + 1),
     record.tokenNo,
@@ -33,7 +35,8 @@ export function recordCsvRow(record, index) {
     record.customerReport || '',
     record.problem?.name || '',
     details,
-    String(record.images?.length || 0),
+    String(photos),
+    String(videos),
   ]
 }
 

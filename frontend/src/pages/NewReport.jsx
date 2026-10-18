@@ -4,7 +4,7 @@ import { Check, Copy, Plus } from 'lucide-react'
 import api from '../api/client.js'
 import ProductSelect from '../components/ProductSelect.jsx'
 import QRScanner from '../components/QRScanner.jsx'
-import ImageUploader from '../components/ImageUploader.jsx'
+import MediaUploader from '../components/MediaUploader.jsx'
 import { Field } from '../components/ui.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { useNotifications } from '../context/NotificationsContext.jsx'
@@ -46,6 +46,7 @@ export default function NewReport() {
   const draft = useRef(loadDraft())
   const [form, setForm] = useState(draft.current ? { ...emptyForm, ...draft.current } : emptyForm)
   const [images, setImages] = useState([])
+  const [videos, setVideos] = useState([])
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [scanning, setScanning] = useState(false)
@@ -106,12 +107,15 @@ export default function NewReport() {
       fd.append('vehicleModel', form.vehicleModel.trim())
       if (form.visitDate) fd.append('visitDate', form.visitDate)
       for (const img of images) fd.append('images', img.file)
+      for (const vid of videos) fd.append('videos', vid.file)
 
       const res = await api.post('/records', fd)
       setResult(res.data.record)
       sessionStorage.removeItem(DRAFT_KEY)
       for (const img of images) URL.revokeObjectURL(img.previewUrl)
+      for (const vid of videos) URL.revokeObjectURL(vid.previewUrl)
       setImages([])
+      setVideos([])
       setForm(emptyForm)
       push(`Report filed · ${res.data.record.tokenNo}`)
     } catch (err) {
@@ -124,6 +128,7 @@ export default function NewReport() {
   const reset = () => {
     setResult(null)
     setImages([])
+    setVideos([])
     setCopied(false)
     setForm({
       product: null,
@@ -291,9 +296,9 @@ export default function NewReport() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="section-title">4 · Photos</h2>
+        <h2 className="section-title">4 · Photos & video</h2>
         <div className="card p-4">
-          <ImageUploader value={images} onChange={setImages} max={4} />
+          <MediaUploader images={images} onImagesChange={setImages} videos={videos} onVideosChange={setVideos} />
         </div>
       </section>
 

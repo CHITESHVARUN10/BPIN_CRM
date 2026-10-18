@@ -23,6 +23,22 @@ function StatusChip({ status }) {
   )
 }
 
+const isVideo = (m) => m?.kind === 'video'
+const photosOf = (arr) => (arr || []).filter((m) => !isVideo(m))
+const videosOf = (arr) => (arr || []).filter(isVideo)
+
+function VideoPlayer({ src, className = '' }) {
+  return (
+    <video
+      src={src}
+      controls
+      playsInline
+      preload="metadata"
+      className={`w-full rounded-xl border border-zinc-200 bg-black ${className}`}
+    />
+  )
+}
+
 export default function ReportDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -66,14 +82,20 @@ export default function ReportDetail() {
     return <EmptyState title="Record not found" hint="It may have been removed or you don't have access." />
   }
 
-  const allImages = [...(record.images || [])]
+  const allImages = [...photosOf(record.images)]
   const imageRuns = []
   for (const fu of record.followUps || []) {
-    imageRuns.push({ images: fu.images || [], startIndex: allImages.length })
-    allImages.push(...(fu.images || []))
+    imageRuns.push({ images: photosOf(fu.images), startIndex: allImages.length })
+    allImages.push(...photosOf(fu.images))
   }
-  imageRuns.push({ images: record.closure?.images || [], startIndex: allImages.length })
-  allImages.push(...(record.closure?.images || []))
+  imageRuns.push({ images: photosOf(record.closure?.images), startIndex: allImages.length })
+  allImages.push(...photosOf(record.closure?.images))
+  const initialPhotos = photosOf(record.images)
+  const initialVideos = videosOf(record.images)
+  const hasInitialMedia = initialPhotos.length > 0 || initialVideos.length > 0
+  const hasAnyMedia = hasInitialMedia
+    || (record.followUps || []).some((fu) => (fu.images || []).length > 0)
+    || (record.closure?.images || []).length > 0
   const isOwner = user && record.technician && String(user._id) === String(record.technician._id)
   const isAdmin = user?.role === 'admin'
   const canClose = record.status === 'open' && (isOwner || isAdmin)
@@ -111,16 +133,21 @@ export default function ReportDetail() {
         ) : null}
       </div>
 
-      {(record.images || []).length > 0 && (
+      {hasInitialMedia && (
         <div>
-          <h2 className="section-title mb-2.5">Photos · initial assessment</h2>
-          <div className="grid grid-cols-3 gap-2">
-            {record.images.map((img, i) => (
-              <button key={i} type="button" onClick={() => setLightbox(i)} className="aspect-square rounded-xl overflow-hidden border border-zinc-200">
-                <img src={img.url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
-              </button>
-            ))}
-          </div>
+          <h2 className="section-title mb-2.5">Photos / video · initial assessment</h2>
+          {initialPhotos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {initialPhotos.map((img, i) => (
+                <button key={i} type="button" onClick={() => setLightbox(i)} className="aspect-square rounded-xl overflow-hidden border border-zinc-200">
+                  <img src={img.url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                </button>
+              ))}
+            </div>
+          )}
+          {initialVideos.map((vid, i) => (
+            <VideoPlayer key={i} src={vid.url} className={initialPhotos.length > 0 ? 'mt-2' : ''} />
+          ))}
         </div>
       )}
 
@@ -147,16 +174,23 @@ export default function ReportDetail() {
                 ) : null}
               </div>
               {(fu.images || []).length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {fu.images.map((img, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setLightbox((imageRuns[idx]?.startIndex ?? 0) + i)}
-                      className="aspect-square rounded-lg overflow-hidden border border-zinc-200"
-                    >
-                      <img src={img.url} alt={`Follow-up photo ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
-                    </button>
+                <div className="space-y-2">
+                  {photosOf(fu.images).length > 0 && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {photosOf(fu.images).map((img, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setLightbox((imageRuns[idx]?.startIndex ?? 0) + i)}
+                          className="aspect-square rounded-lg overflow-hidden border border-zinc-200"
+                        >
+                          <img src={img.url} alt={`Follow-up photo ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {videosOf(fu.images).map((vid, i) => (
+                    <VideoPlayer key={i} src={vid.url} />
                   ))}
                 </div>
               )}
@@ -165,10 +199,10 @@ export default function ReportDetail() {
         </div>
       )}
 
-      {(record.images || []).length === 0 && (record.followUps || []).length === 0 && (
+      {!hasAnyMedia && (record.followUps || []).length === 0 && (
         <div className="card p-6 flex items-center gap-3 text-zinc-400">
           <ImageOff size={18} />
-          <p className="text-sm">No photos attached</p>
+          <p className="text-sm">No media attached</p>
         </div>
       )}
 
@@ -181,16 +215,23 @@ export default function ReportDetail() {
           </div>
           <Detail label="Work done" value={record.closure.workDone} />
           {(record.closure.images || []).length > 0 && (
-            <div className="grid grid-cols-4 gap-2">
-              {record.closure.images.map((img, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setLightbox(imageRuns[imageRuns.length - 1].startIndex + i)}
-                  className="aspect-square rounded-lg overflow-hidden border border-zinc-200"
-                >
-                  <img src={img.url} alt={`Closure photo ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
-                </button>
+            <div className="space-y-2">
+              {photosOf(record.closure.images).length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {photosOf(record.closure.images).map((img, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setLightbox(imageRuns[imageRuns.length - 1].startIndex + i)}
+                      className="aspect-square rounded-lg overflow-hidden border border-zinc-200"
+                    >
+                      <img src={img.url} alt={`Closure photo ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {videosOf(record.closure.images).map((vid, i) => (
+                <VideoPlayer key={i} src={vid.url} />
               ))}
             </div>
           )}

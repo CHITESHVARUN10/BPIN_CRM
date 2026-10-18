@@ -4,6 +4,18 @@ import { ChevronLeft, ChevronRight, PlusCircle, Search, FolderOpen } from 'lucid
 import api from '../api/client.js'
 import { EmptyState, SkeletonRows, formatDate } from '../components/ui.jsx'
 
+const countPhotos = (arr) => (arr || []).filter((m) => m.kind !== 'video').length
+const countVideos = (arr) => (arr || []).filter((m) => m.kind === 'video').length
+
+function mediaSummary(arr) {
+  const photos = countPhotos(arr)
+  const videos = countVideos(arr)
+  return [
+    photos ? `${photos} photo${photos === 1 ? '' : 's'}` : null,
+    videos ? `${videos} video${videos === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(' · ')
+}
+
 export default function MyRecords() {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
@@ -95,7 +107,7 @@ export default function MyRecords() {
                   </div>
                   <div className="text-right shrink-0 space-y-1">
                     <p className="text-[12px] font-medium text-zinc-700">{r.problem?.name}</p>
-                    {r.images?.length ? <p className="text-[11px] text-zinc-400">{r.images.length} photo{r.images.length === 1 ? '' : 's'}</p> : null}
+                    {r.images?.length ? <p className="text-[11px] text-zinc-400">{mediaSummary(r.images)}</p> : null}
                   </div>
                 </div>
               </Link>

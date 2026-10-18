@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Check, Loader2 } from 'lucide-react'
 import api from '../api/client.js'
-import ImageUploader from '../components/ImageUploader.jsx'
+import MediaUploader from '../components/MediaUploader.jsx'
 import { EmptyState, Field, SkeletonRows, formatDate } from '../components/ui.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 
@@ -15,6 +15,7 @@ export default function CloseCase() {
   const [workDone, setWorkDone] = useState('')
   const [error, setError] = useState('')
   const [images, setImages] = useState([])
+  const [videos, setVideos] = useState([])
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -41,6 +42,7 @@ export default function CloseCase() {
       const fd = new FormData()
       fd.append('workDone', clean)
       for (const img of images) fd.append('images', img.file)
+      for (const vid of videos) fd.append('videos', vid.file)
       const res = await api.post(`/records/${id}/close`, fd)
       setRecord((r) => ({ ...r, ...res.data.record }))
       push(`Case closed · ${res.data.record.tokenNo}`)
@@ -92,8 +94,8 @@ export default function CloseCase() {
             placeholder="e.g. Replaced main PCB, tested display and touch for 30 minutes — working normally…"
           />
         </Field>
-        <Field label="Photos" hint="Optional — attach proof of work if available (max 4)">
-          <ImageUploader value={images} onChange={setImages} max={4} />
+        <Field label="Photos & video" hint="Optional — attach proof of work if available (max 4 photos, 1 video)">
+          <MediaUploader images={images} onImagesChange={setImages} videos={videos} onVideosChange={setVideos} />
         </Field>
       </div>
 
