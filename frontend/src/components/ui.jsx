@@ -106,6 +106,52 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', 
   )
 }
 
+// ---------------------------------------------------------------------------
+// Phone push. Environments differ a lot (Android Chrome, iOS Home-Screen app,
+// LAN links without HTTPS, desktops), so every state gets an explicit,
+// friendly message instead of a blanket error toast. See pushEnvironment().
+// ---------------------------------------------------------------------------
+
+function isIos() {
+  const ua = navigator.userAgent || ''
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+}
+
+function isStandalone() {
+  return navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)')?.matches === true
+}
+
+function pushEnvironment() {
+  const ios = isIos()
+  const standalone = isStandalone()
+  if (!window.isSecureContext) return { code: 'insecure', ios, standalone }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    if (ios && !standalone) return { code: 'ios-install', ios, standalone }
+    return { code: 'unsupported', ios, standalone }
+  }
+  return { code: 'ok', ios, standalone }
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('push setup timed out')), ms)
+    promise.then(
+      (v) => { clearTimeout(t); resolve(v) },
+      (e) => { clearTimeout(t); reject(e) },
+    )
+  })
+}
+
+const PUSH_COPY = {
+  enabled: 'Push is enabled on this device.',
+  idle: 'Get reminders on this phone when the admin tasks you or reopens a case. If Android asks, choose “Always allow” so alerts keep working later.',
+  denied: 'Notifications are blocked for this site. Allow them in the browser settings (tap the padlock/info icon next to the address), then come back and tap Enable.',
+  unsupported: 'Push is not available in this browser — in-app alerts still work here.',
+  insecure: 'Phone notifications need a secure connection. Open the app over HTTPS (or on localhost), then enable.',
+  'ios-install': 'On iPhone and iPad, notifications work only after installing the app: Share → “Add to Home Screen”, open it from that icon, then tap Enable.',
+  error: 'Setup didn’t finish. Tap Enable to try again.',
+}
+
 export function PushEnable({ state: initial = 'idle' }) {
   const push = useToast().push
   const { user } = useAuth()
@@ -115,20 +161,23 @@ export function PushEnable({ state: initial = 'idle' }) {
   useEffect(() => {
     let alive = true
     const detect = async () => {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-        if (alive) setStatus('unsupported')
+      const env = pushEnvironment()
+      if (env.code !== 'ok') {
+        if (alive) setStatus(env.code)
+        return
+      }
+      if (Notification.permission === 'denied') {
+        if (alive) setStatus('denied')
         return
       }
       if (Notification.permission === 'granted') {
         try {
-          const registration = await navigator.serviceWorker.ready
+          const registration = await withTimeout(navigator.serviceWorker.ready, 8000)
           const existing = await registration.pushManager.getSubscription()
           if (alive) setStatus(existing ? 'enabled' : 'idle')
         } catch {
           if (alive) setStatus('idle')
         }
-      } else if (Notification.permission === 'denied') {
-        if (alive) setStatus('denied')
       }
     }
     if (user) detect()
@@ -138,42 +187,103 @@ export function PushEnable({ state: initial = 'idle' }) {
   }, [user])
 
   const beginSubscribe = useCallback(async () => {
+    const env = pushEnvironment()
+    if (env.code !== 'ok') {
+      setStatus(env.code)
+      return
+    }
+
     setBusy(true)
     try {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      let publicKey = ''
+      try {
+        const { data } = await api.get('/push/vapid-public')
+        publicKey = data.publicKey || ''
+      } catch {
+        setStatus('error')
+        push('Couldn’t reach the server — check the connection and try again.', 'error')
+        return
+      }
+      if (!publicKey) {
         setStatus('unsupported')
         return
       }
-      const { data } = await api.get('/push/vapid-public')
-      if (!data.publicKey) {
-        setStatus('unsupported')
-        return
+
+      let permission = Notification.permission
+      if (permission === 'default') {
+        permission = await Notification.requestPermission().catch(() => 'denied')
       }
-      const permission = await Notification.requestPermission()
       if (permission !== 'granted') {
+        // The user chose to block the prompt (or Android "Don't allow") —
+        // not an error, just explain how to change it later.
         setStatus('denied')
         return
       }
-      const registration = await navigator.serviceWorker.ready
-      const existing = await registration.pushManager.getSubscription()
-      const subscription =
-        existing ??
-        (await registration.pushManager.subscribe({
+
+      let registration
+      try {
+        registration = await withTimeout(navigator.serviceWorker.ready, 10000)
+      } catch {
+        if (env.ios && !env.standalone) {
+          setStatus('ios-install')
+        } else {
+          setStatus('error')
+          push('Notifications couldn’t finish setting up on this device — reload the app and try again.', 'error')
+        }
+        return
+      }
+
+      let subscription = null
+      try {
+        subscription = await registration.pushManager.getSubscription()
+      } catch {
+        subscription = null
+      }
+      if (!subscription) {
+        const subscribe = () => registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(data.publicKey),
-        }))
-      await api.post('/push/subscription', { subscription: subscription.toJSON() })
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        })
+        try {
+          subscription = await subscribe()
+        } catch {
+          // transient failures happen on Android Chrome — one quiet retry
+          try {
+            await new Promise((r) => setTimeout(r, 600))
+            subscription = await subscribe()
+          } catch {
+            subscription = null
+          }
+        }
+        if (!subscription) {
+          if (env.ios && !env.standalone) {
+            setStatus('ios-install')
+          } else {
+            setStatus('error')
+            push('This device couldn’t subscribe right now — try again in a moment.', 'error')
+          }
+          return
+        }
+      }
+
+      try {
+        await api.post('/push/subscription', { subscription: subscription.toJSON() })
+      } catch {
+        setStatus('error')
+        push('Almost there — syncing with the server failed. Tap Enable to retry.', 'error')
+        return
+      }
+
       setStatus('enabled')
       push('Phone notifications are now enabled')
-    } catch {
-      setStatus('denied')
-      push('Could not enable phone notifications. In-app alerts still work.', 'error')
     } finally {
       setBusy(false)
     }
   }, [push])
 
   if (!user) return null
+
+  const showButton = status === 'idle' || status === 'denied' || status === 'error'
 
   return (
     <div className="card p-4">
@@ -183,17 +293,9 @@ export function PushEnable({ state: initial = 'idle' }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-zinc-900">Phone notifications</p>
-          <p className="mt-0.5 text-[12.5px] text-zinc-500">
-            {status === 'enabled'
-              ? 'Push is enabled on this device.'
-              : status === 'denied'
-                ? 'Permission is blocked in the browser settings — in-app alerts still work here.'
-                : status === 'unsupported'
-                  ? 'Push is not available on this device — in-app alerts still work.'
-                  : 'Get reminders on this phone when the admin tasks you or reopens a case.'}
-          </p>
+          <p className="mt-0.5 text-[12.5px] text-zinc-500">{PUSH_COPY[status] || PUSH_COPY.idle}</p>
         </div>
-        {status !== 'enabled' && status !== 'unsupported' ? (
+        {showButton ? (
           <button type="button" onClick={beginSubscribe} disabled={busy} className="btn btn-sm btn-outline shrink-0">
             {busy ? <Loader2 size={14} className="animate-spin" /> : <CalendarClock size={14} />}
             Enable
