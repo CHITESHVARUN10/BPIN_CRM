@@ -1,0 +1,21 @@
+{
+  "name": "bpin-backup-cron",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "local": "node scripts/run-local.mjs",
+    "check": "node --check api/start.js && node --check api/work.js && node --check lib/backup.js && node --check lib/drive.js"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.2",
+    "googleapis": "^186.0.0",
+    "mongoose": "^8.0.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.1"
+  }
+}
