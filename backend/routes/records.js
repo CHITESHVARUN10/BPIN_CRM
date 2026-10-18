@@ -8,7 +8,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js'
 import { nextToken } from '../utils/token.js'
 import { escapeRx } from '../utils/common.js'
 import { startOfDay, startOfMonth, parseBounds } from '../utils/dates.js'
-import { cloudinaryEnabled, uploadBuffer } from '../utils/cloudinary.js'
+import { storageEnabled, uploadMedia } from '../utils/blob.js'
 import { logAudit, ACTIONS } from '../utils/log.js'
 import Notification from '../models/Notification.js'
 import { sendToUser } from '../utils/push.js'
@@ -16,19 +16,53 @@ import { formatDateLabel } from '../utils/dates.js'
 
 const router = Router()
 
-const ACCEPTED = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime'])
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 4 },
+  limits: { fileSize: 50 * 1024 * 1024, files: 5 },
   fileFilter: (req, file, cb) => {
-    if (ACCEPTED.has(file.mimetype)) return cb(null, true)
+    if (file.fieldname === 'videos') {
+      if (VIDEO_TYPES.has(file.mimetype)) return cb(null, true)
+      const err = new Error('Only MP4, WebM or MOV videos are allowed')
+      err.status = 400
+      return cb(err)
+    }
+    if (IMAGE_TYPES.has(file.mimetype)) return cb(null, true)
     const err = new Error('Only JPEG, PNG or WebP images are allowed')
     err.status = 400
     return cb(err)
   },
 })
+const uploadMediaFiles = upload.fields([
+  { name: 'images', maxCount: 4 },
+  { name: 'videos', maxCount: 1 },
+])
 
-router.post('/', requireAuth, upload.array('images', 4), async (req, res, next) => {
+async function collectMedia(req) {
+  const images = req.files?.images || []
+  const videos = req.files?.videos || []
+  if ((images.length || videos.length) && !storageEnabled()) {
+    const err = new Error('Media upload is not configured on the server')
+    err.status = 400
+    throw err
+  }
+  const media = []
+  for (const file of images) {
+    if (file.size > 10 * 1024 * 1024) {
+      const err = new Error('Each photo must be under 10MB')
+      err.status = 400
+      throw err
+    }
+    media.push(await uploadMedia(file.buffer, { contentType: file.mimetype, kind: 'image' }))
+  }
+  for (const file of videos) {
+    media.push(await uploadMedia(file.buffer, { contentType: file.mimetype, kind: 'video' }))
+  }
+  return media
+}
+
+router.post('/', requireAuth, uploadMediaFiles, async (req, res, next) => {
   try {
     const body = req.body
     const serial = String(body.serialNumber || '').trim()
@@ -54,11 +88,7 @@ router.post('/', requireAuth, upload.array('images', 4), async (req, res, next) 
       problemSub = { ref: problem._id, name: problem.name, isOther: false }
     }
 
-    if (req.files?.length && !cloudinaryEnabled()) {
-      return res.status(400).json({ message: 'Image upload is not configured on the server' })
-    }
-    const uploads = []
-    for (const file of req.files || []) uploads.push(await uploadBuffer(file.buffer))
+    const uploads = await collectMedia(req)
 
     const create = async () => ServiceRecord.create({
       tokenNo: await nextToken(),
@@ -90,7 +120,7 @@ router.post('/', requireAuth, upload.array('images', 4), async (req, res, next) 
   }
 })
 
-router.post('/:id/close', requireAuth, upload.array('images', 4), async (req, res, next) => {
+router.post('/:id/close', requireAuth, uploadMediaFiles, async (req, res, next) => {
   try {
     const record = await ServiceRecord.findById(req.params.id)
     if (!record) return res.status(404).json({ message: 'Record not found' })
@@ -104,11 +134,7 @@ router.post('/:id/close', requireAuth, upload.array('images', 4), async (req, re
     const workDone = String(req.body.workDone || '').trim()
     if (!workDone) return res.status(400).json({ message: 'Please describe the work done before closing' })
 
-    if (req.files?.length && !cloudinaryEnabled()) {
-      return res.status(400).json({ message: 'Image upload is not configured on the server' })
-    }
-    const uploads = []
-    for (const file of req.files || []) uploads.push(await uploadBuffer(file.buffer))
+    const uploads = await collectMedia(req)
 
     record.closure = {
       closedBy: req.user._id,
@@ -283,7 +309,7 @@ router.get('/:id', requireAuth, async (req, res, next) => {
   }
 })
 
-router.post('/:id/follow-up', requireAuth, upload.array('images', 4), async (req, res, next) => {
+router.post('/:id/follow-up', requireAuth, uploadMediaFiles, async (req, res, next) => {
   try {
     const record = await ServiceRecord.findById(req.params.id)
     if (!record) return res.status(404).json({ message: 'Record not found' })
@@ -312,11 +338,7 @@ router.post('/:id/follow-up', requireAuth, upload.array('images', 4), async (req
       problemSub = { ref: problem._id, name: problem.name, isOther: false }
     }
 
-    if (req.files?.length && !cloudinaryEnabled()) {
-      return res.status(400).json({ message: 'Image upload is not configured on the server' })
-    }
-    const uploads = []
-    for (const file of req.files || []) uploads.push(await uploadBuffer(file.buffer))
+    const uploads = await collectMedia(req)
 
     const closes = String(body.closes || '').toLowerCase() === 'true' || body.closes === true
     record.followUps.push({
