@@ -173,6 +173,11 @@ class GoogleDrive {
   }
 
   async resolvePath(folderId, relativePath) {
+    // Real backups store each file as a flat Drive file whose *name* contains
+    // slashes (e.g. "db/users.ndjson.gz"), while local mirrors use nested
+    // folders. Try the exact name first, then walk the path segments.
+    const direct = await this.findInFolderByName(folderId, String(relativePath))
+    if (direct) return direct
     const parts = String(relativePath).split('/').filter(Boolean)
     let parent = folderId
     let entry = null
@@ -287,6 +292,8 @@ class LocalDrive {
   }
 
   async resolvePath(folderId, relativePath) {
+    const direct = await this.findInFolderByName(folderId, String(relativePath))
+    if (direct) return direct
     const parts = String(relativePath).split('/').filter(Boolean)
     let parent = folderId
     let entry = null

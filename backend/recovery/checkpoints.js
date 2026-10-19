@@ -53,24 +53,47 @@ export async function inspectCheckpoint(drive, folder) {
   }
 
   try {
-    const manifestFile = await drive.findInFolderByName(folder.id, 'manifest.json')
-    if (!manifestFile) {
+    // Real Drive backups store flat names (e.g. "db/users.ndjson.gz") while
+    // local mirrors use nested folders — handle both.
+    const folderChildren = await drive.listChildren(folder.id)
+    const directChildren = new Map(folderChildren.map((child) => [child.name, child]))
+    const findFile = async (relativePath) =>
+      directChildren.get(String(relativePath)) || (await drive.resolvePath(folder.id, String(relativePath)))
+
+    // If a run folder ever contains more than one manifest.json (e.g. an older
+    // interrupted finalize), prefer the newest completed manifest.
+    const manifestCandidates = folderChildren.filter((c) => c.name === 'manifest.json')
+    if (!manifestCandidates.length) {
       entry.errors.push('manifest.json is missing')
       return entry
     }
-    const manifest = JSON.parse((await drive.downloadFile(manifestFile.id)).toString('utf8'))
+    const parsed = []
+    for (const candidate of manifestCandidates) {
+      try {
+        parsed.push({ id: candidate.id, manifest: JSON.parse((await drive.downloadFile(candidate.id)).toString('utf8')) })
+      } catch (err) {
+        entry.errors.push(`manifest could not be read: ${err.message}`)
+      }
+    }
+    if (!parsed.length) return entry
+    const completed = parsed
+      .filter((candidate) => candidate.manifest?.status === 'completed')
+      .sort((a, b) => String(b.manifest.completedAt || '').localeCompare(String(a.manifest.completedAt || '')))
+    const chosen = completed[0] || parsed[0]
+    const manifest = chosen.manifest
+    if (parsed.length > 1) {
+      entry.warnings.push(
+        `${parsed.length} manifest.json files found; using the ${completed.length ? 'newest completed' : 'newest readable'} manifest.`,
+      )
+    }
     entry.manifest = manifest
     entry.integrity.manifest = true
     validateManifest(manifest, entry)
 
     // Verify the files the restore would read actually exist and have the
     // manifest's sizes (content checksums are re-verified in dry-run/execute).
-    const dbFolder = await drive.findInFolderByName(folder.id, 'db')
-    const dbChildren = dbFolder ? await drive.listChildren(dbFolder.id) : []
-    const byFileName = new Map(dbChildren.map((c) => [c.name, c]))
     for (const collection of manifest.db?.collections || []) {
-      const fileName = String(collection.file || '').split('/').pop()
-      const file = byFileName.get(fileName)
+      const file = await findFile(collection.file)
       if (!file) {
         entry.db.errors.push(`missing file ${collection.file}`)
         continue
@@ -79,16 +102,23 @@ export async function inspectCheckpoint(drive, folder) {
         entry.db.errors.push(`size mismatch for ${collection.file}`)
       }
     }
-    entry.integrity.dbFiles = dbChildren.length ? 'present' : 'missing'
+    entry.integrity.dbFiles = entry.db.errors.length ? 'incomplete' : 'present'
 
-    if ((manifest.media?.files || []).length > 0) {
-      const mediaFolder = await drive.findInFolderByName(folder.id, 'media')
-      if (!mediaFolder) {
-        entry.media.errors.push('media folder is missing')
-        entry.integrity.mediaFiles = 'missing'
-      } else {
-        entry.integrity.mediaFiles = 'present'
+    const mediaFiles = manifest.media?.files || []
+    if (mediaFiles.length > 0) {
+      let missing = 0
+      for (const media of mediaFiles) {
+        const file = await findFile(media.file)
+        if (!file) {
+          missing += 1
+          if (entry.media.errors.length < 25) entry.media.errors.push(`missing file ${media.file}`)
+          continue
+        }
+        if (file.size !== null && Number(media.bytes) !== file.size) {
+          if (entry.media.errors.length < 25) entry.media.errors.push(`size mismatch for ${media.file}`)
+        }
       }
+      entry.integrity.mediaFiles = missing || entry.media.errors.length ? 'incomplete' : 'present'
     } else {
       entry.integrity.mediaFiles = 'none_required'
     }

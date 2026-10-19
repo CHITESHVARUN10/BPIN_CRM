@@ -173,13 +173,17 @@ export default function AdminRecovery() {
       clearInterval(pollRef.current)
       pollRef.current = setInterval(async () => {
         try {
-          const { data } = await api.get(`/recovery/operations/${operation.id}`)
+          // skipAuthRedirect: while the users collection is atomically swapped
+          // during a restore, an in-flight request can briefly see no user.
+          // Keep polling instead of logging the operator out.
+          const { data } = await api.get(`/recovery/operations/${operation.id}`, { skipAuthRedirect: true })
           setOperation(data.operation)
           if (TERMINAL.includes(data.operation.status)) {
             clearInterval(pollRef.current)
             loadOperations()
           }
         } catch (err) {
+          if (err?.response?.status === 401) return
           clearInterval(pollRef.current)
           handleApiError(err)
         }

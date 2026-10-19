@@ -72,9 +72,9 @@ async function releaseLock(db, holder) {
 // ── Drive file helpers ───────────────────────────────────────────────────────
 
 async function replaceFile(drive, parentId, name, content, mimeType) {
-  const existing = await drive.findInFolderByName(parentId, name)
-  if (existing) await drive.deleteFile(existing.id)
-  return drive.uploadStream({
+  // Update in place when the file already exists: permanent delete is not
+  // available to all service-account roles, and update avoids duplicates.
+  return drive.writeStream({
     parentId,
     name,
     mimeType: mimeType || guessContentType(name),
@@ -316,11 +316,6 @@ async function claimItem(db, item) {
 async function uploadItem(db, run, item) {
   const drive = await getDrive()
 
-  // remove any half-written file from a previous attempt so retries
-  // never leave duplicates behind in the run folder
-  const existing = await drive.findInFolderByName(run.drive.folderId, item.fileName)
-  if (existing) await drive.deleteFile(existing.id)
-
   let sourceStream
   let contentType
   let docsFn = null
@@ -339,7 +334,7 @@ async function uploadItem(db, run, item) {
   sourceStream.on('error', (err) => counted.transform.destroy(err))
   sourceStream.pipe(counted.transform)
 
-  const up = await drive.uploadStream({
+  const up = await drive.writeStream({
     parentId: run.drive.folderId,
     name: item.fileName,
     mimeType: contentType,
@@ -447,12 +442,16 @@ async function finalizeRun(db, run) {
   }
 
   const completedAt = new Date()
+  const doneRun = { ...run, status: 'completed', completedAt }
+
+  // Manifest first: if the upload fails, the run stays "running" with zero
+  // pending items and the next worker tick retries finalization. Writing it
+  // after marking completed could leave a completed run with a stale manifest.
+  await writeManifest(db, doneRun)
   await db.collection('backup_runs').updateOne(
     { _id: run._id },
     { $set: { status: 'completed', completedAt, lastError: null, updatedAt: completedAt } },
   )
-  const doneRun = { ...run, status: 'completed', completedAt }
-  await writeManifest(db, doneRun)
 
   const items = await db.collection('backup_items').find({ runId: run._id }).toArray()
   const mediaItems = items.filter((i) => i.type === 'media')
@@ -482,7 +481,8 @@ async function rotate(db) {
   const rotated = []
   for (const run of extra) {
     try {
-      if (run.drive?.folderId) await drive.deleteFolderRecursive(run.drive.folderId)
+      let removal = 'deleted'
+      if (run.drive?.folderId) removal = (await drive.deleteFolderRecursive(run.drive.folderId)) || 'deleted'
       await db.collection('backup_runs').updateOne(
         { _id: run._id },
         { $set: { status: 'rotated', rotatedAt: new Date(), updatedAt: new Date() } },
@@ -491,14 +491,20 @@ async function rotate(db) {
         action: 'backup_rotated',
         targetId: run._id,
         targetLabel: run.drive?.folderName,
-        detail: `Oldest backup deleted — the newest ${env.keep} backups are kept`,
+        detail: `Oldest backup removed (${removal}) — the newest ${env.keep} backups are kept`,
       })
       rotated.push(run.drive?.folderName)
     } catch {
       // deletion failed — it stays 'completed' and the next finalize retries
     }
   }
-  await writeIndex(db)
+  try {
+    await writeIndex(db)
+  } catch (err) {
+    // The index is a convenience listing; a failure must not fail the backup.
+    // It is rewritten on the next completed run.
+    console.error('[backup] could not rewrite BACKUPS.json:', err?.message || err)
+  }
   return rotated
 }
 

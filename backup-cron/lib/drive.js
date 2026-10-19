@@ -152,8 +152,51 @@ class GoogleDrive {
     return { id: res.data.id, bytes: counter.bytes() }
   }
 
+  // Overwrite a file's content in place. This works for service accounts that
+  // have edit access but not permanent-delete capability (external members of
+  // a Shared Drive are commonly limited to Contributor).
+  async updateStream({ fileId, name, mimeType, stream }) {
+    const counter = countBytes()
+    stream.pipe(counter.transform)
+    const res = await this.drive.files.update({
+      fileId,
+      requestBody: name ? { name } : {},
+      media: { mimeType, body: counter.transform },
+      supportsAllDrives: true,
+      fields: 'id,name,size',
+    })
+    return { id: res.data.id, bytes: counter.bytes() }
+  }
+
+  async writeStream({ parentId, name, mimeType, stream }) {
+    const existing = await this.findInFolderByName(parentId, name)
+    if (existing) return this.updateStream({ fileId: existing.id, name, mimeType, stream })
+    return this.uploadStream({ parentId, name, mimeType, stream })
+  }
+
   async deleteFile(fileId) {
-    await this.drive.files.delete({ fileId, supportsAllDrives: true })
+    try {
+      await this.drive.files.delete({ fileId, supportsAllDrives: true })
+      return 'deleted'
+    } catch (err) {
+      if (err?.code !== 404) throw err
+      // No permanent-delete capability: fall back to trashing the file, which
+      // is permitted by Contributor/Content-manager roles.
+      await this.drive.files.update({ fileId, requestBody: { trashed: true }, supportsAllDrives: true })
+      return 'trashed'
+    }
+  }
+
+  async deleteFolderRecursive(folderId) {
+    try {
+      await this.drive.files.delete({ fileId: folderId, supportsAllDrives: true })
+      return 'deleted'
+    } catch (err) {
+      if (err?.code !== 404) throw err
+    }
+    // Trashing the folder removes it (and its contents) from the visible drive.
+    await this.drive.files.update({ fileId: folderId, requestBody: { trashed: true }, supportsAllDrives: true })
+    return 'trashed'
   }
 
   async listChildren(parentId) {
@@ -172,15 +215,6 @@ class GoogleDrive {
       pageToken = res.data.nextPageToken || undefined
     } while (pageToken)
     return out
-  }
-
-  async deleteFolderRecursive(folderId) {
-    const children = await this.listChildren(folderId)
-    for (const child of children) {
-      if (child.mimeType === 'application/vnd.google-apps.folder') await this.deleteFolderRecursive(child.id)
-      else await this.deleteFile(child.id)
-    }
-    await this.deleteFile(folderId)
   }
 
   // Download helper used by verification drills: fetch a file's bytes back.
@@ -243,8 +277,13 @@ class LocalDrive {
     return { id, bytes: counter.bytes(), mimeType }
   }
 
+  async writeStream(args) {
+    return this.uploadStream(args)
+  }
+
   async deleteFile(fileId) {
     await fsp.rm(this.abs(fileId), { force: true })
+    return 'deleted'
   }
 
   async listChildren(parentId) {
@@ -264,6 +303,7 @@ class LocalDrive {
 
   async deleteFolderRecursive(folderId) {
     await fsp.rm(this.abs(folderId), { recursive: true, force: true })
+    return 'deleted'
   }
 
   async downloadFile(fileId) {

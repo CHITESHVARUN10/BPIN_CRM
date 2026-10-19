@@ -15,7 +15,8 @@ client.interceptors.response.use(
   (response) => response,
   (error) => {
     const url = error.config?.url || ''
-    if (error.response?.status === 401 && !url.includes('/auth/login') && !url.includes('/auth/me')) {
+    const skipAuthRedirect = error.config?.skipAuthRedirect === true
+    if (error.response?.status === 401 && !skipAuthRedirect && !url.includes('/auth/login') && !url.includes('/auth/me')) {
       window.dispatchEvent(new Event('bpin:unauthorized'))
     }
     return Promise.reject(error)
