@@ -83,7 +83,14 @@ export default function AdminUsers() {
           <h1 className="text-xl font-semibold tracking-tight">Users</h1>
           <p className="text-[13px] text-zinc-500 mt-0.5">{items?.length ?? '…'} accounts</p>
         </div>
-        <button type="button" className="btn btn-sm" onClick={() => setAddOpen(true)}>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={() => {
+            setForm((f) => ({ ...f, role: isSuperAdmin ? f.role : 'technician' }))
+            setAddOpen(true)
+          }}
+        >
           <UserPlus size={14} />
           Add user
         </button>
@@ -120,15 +127,17 @@ export default function AdminUsers() {
                   </span>
                 ) : (
                   <>
-                    <select
-                      className="input !min-h-[36px] !w-auto text-[12.5px]"
-                      value={u.role}
-                      disabled={busyId === String(u._id)}
-                      onChange={(e) => patch(u._id, { role: e.target.value }, 'Role updated')}
-                    >
-                      <option value="technician">Technician</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                    {isSuperAdmin ? (
+                      <select
+                        className="input !min-h-[36px] !w-auto text-[12.5px]"
+                        value={u.role}
+                        disabled={busyId === String(u._id)}
+                        onChange={(e) => patch(u._id, { role: e.target.value }, 'Role updated')}
+                      >
+                        <option value="technician">Technician</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    ) : null}
                     <button
                       type="button"
                       className="btn btn-sm btn-outline"
@@ -199,8 +208,11 @@ export default function AdminUsers() {
               <label className="label">Role</label>
               <select className="input" value={form.role} onChange={(e) => set('role', e.target.value)}>
                 <option value="technician">Technician</option>
-                <option value="admin">Admin</option>
+                {isSuperAdmin ? <option value="admin">Admin</option> : null}
               </select>
+              {!isSuperAdmin ? (
+                <p className="mt-1 text-[11px] text-zinc-400">Only the super admin can create administrator accounts.</p>
+              ) : null}
             </div>
             <div>
               <label className="label">Password<span className="text-red-600 ml-0.5">*</span></label>

@@ -6,7 +6,7 @@ const router = Router()
 router.use(requireAuth, requireAdmin)
 
 const VALID_ACTIONS = [
-  'user_created', 'user_updated',
+  'user_created', 'user_updated', 'user_password_reset',
   'case_created', 'case_edited', 'case_closed', 'case_reopened',
   'product_created', 'product_updated',
   'assignment_created', 'assignment_updated',

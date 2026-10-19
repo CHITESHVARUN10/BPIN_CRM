@@ -41,6 +41,10 @@ router.post('/logout', (req, res, next) => {
 })
 
 router.get('/me', (req, res) => {
+  if (req.user?.active === false) {
+    req.logOut(() => {})
+    return res.json({ user: null })
+  }
   res.json({ user: req.user ? out(req.user) : null })
 })
 

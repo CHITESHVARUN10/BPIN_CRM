@@ -6,6 +6,7 @@ import { EmptyState, SkeletonRows, formatDateTime } from '../components/ui.jsx'
 const ACTION_LABELS = {
   user_created: 'User created',
   user_updated: 'User updated',
+  user_password_reset: 'User password reset',
   case_created: 'Assessment filed',
   case_edited: 'Case edited',
   case_closed: 'Case closed',

@@ -20,6 +20,7 @@ export async function logAudit(actor, action, { kind, id, label } = {}, detail =
 export const ACTIONS = {
   userCreated: 'user_created',
   userUpdated: 'user_updated',
+  userPasswordReset: 'user_password_reset',
   caseCreated: 'case_created',
   caseEdited: 'case_edited',
   caseClosed: 'case_closed',

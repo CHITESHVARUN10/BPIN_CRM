@@ -24,6 +24,9 @@ router.post('/', async (req, res, next) => {
     const cleanedEmail = String(email || '').trim().toLowerCase()
     if (!EMAIL_RX.test(cleanedEmail)) return res.status(400).json({ message: 'Valid email is required' })
     if (!['technician', 'admin'].includes(role)) return res.status(400).json({ message: 'Role must be technician or admin' })
+    if (role === 'admin' && req.user.superAdmin !== true) {
+      return res.status(403).json({ message: 'Only the super admin can create administrator accounts' })
+    }
     if (!password || String(password).length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' })
 
     const exists = await User.findOne({ email: cleanedEmail }).lean()
@@ -51,7 +54,8 @@ router.patch('/:id', async (req, res, next) => {
     if (!user) return res.status(404).json({ message: 'User not found' })
 
     const isSuperAdmin = req.user.superAdmin === true
-    if (user.role === 'admin' && String(user._id) !== String(req.user._id) && !isSuperAdmin) {
+    const isSelf = String(user._id) === String(req.user._id)
+    if (user.role === 'admin' && !isSelf && !isSuperAdmin) {
       return res.status(403).json({ message: 'Only the super admin can manage other administrators' })
     }
 
@@ -61,13 +65,16 @@ router.patch('/:id', async (req, res, next) => {
     if (b.region !== undefined) user.region = String(b.region).trim()
     if (b.role !== undefined) {
       if (!['technician', 'admin'].includes(b.role)) return res.status(400).json({ message: 'Invalid role' })
-      if (String(user._id) === String(req.user._id) && b.role !== 'admin') {
+      if (b.role === 'admin' && !isSuperAdmin) {
+        return res.status(403).json({ message: 'Only the super admin can make someone an administrator' })
+      }
+      if (isSelf && b.role !== 'admin') {
         return res.status(400).json({ message: 'You cannot remove your own admin role' })
       }
       user.role = b.role
     }
     if (b.active !== undefined) {
-      if (String(user._id) === String(req.user._id) && b.active === false) {
+      if (isSelf && b.active === false) {
         return res.status(400).json({ message: 'You cannot deactivate your own account' })
       }
       user.active = Boolean(b.active)
@@ -80,7 +87,22 @@ router.patch('/:id', async (req, res, next) => {
     }
 
     await user.save()
-    await logAudit(req.user, ACTIONS.userUpdated, { kind: 'user', id: user._id, label: `${user.name} (${user.email})` }, `Updated: ${Object.keys(b).filter(Boolean).join(', ')}`)
+    const updatedFields = Object.keys(b).filter((key) => b[key] !== undefined && key !== 'password')
+    if (updatedFields.length) {
+      await logAudit(req.user, ACTIONS.userUpdated, { kind: 'user', id: user._id, label: `${user.name} (${user.email})` }, `Updated: ${updatedFields.join(', ')}`)
+    }
+    if (b.password !== undefined) {
+      if (isSelf) {
+        await logAudit(req.user, ACTIONS.userUpdated, { kind: 'user', id: user._id, label: `${user.name} (${user.email})` }, 'Updated: password')
+      } else {
+        await logAudit(
+          req.user,
+          ACTIONS.userPasswordReset,
+          { kind: 'user', id: user._id, label: `${user.name} (${user.email})` },
+          `Password reset for ${user.name} (${user.email})`,
+        )
+      }
+    }
     res.json({ item: safeUser(user) })
   } catch (err) {
     next(err)
