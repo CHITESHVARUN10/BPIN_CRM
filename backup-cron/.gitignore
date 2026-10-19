@@ -1,2 +1,4 @@
 .drive-local/
 .vercel/
+service-account*.json
+*.key.json

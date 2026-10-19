@@ -64,7 +64,8 @@ in a Shared Drive:
    `client_email` (from the JSON key, looks like
    `bpin-backup@<project>.iam.gserviceaccount.com`) as **Content manager**.
 3. Copy the Shared Drive ID from the URL:
-   `drive.google.com/drive/folders/<GOOGLE_SHARED_DRIVE_ID>`.
+   `drive.google.com/drive/folders/<SHARED_DRIVE_ID>` (and note the drive's
+   name, e.g. `BPIN_Backups`).
 
 The job creates a `BPIN CRM Backups` folder inside that Shared Drive by
 itself (name configurable).
@@ -75,9 +76,10 @@ itself (name configurable).
    `backup-cron` (framework preset: Other).
 2. Environment variables (Production):
    `MONGODB_URI`, `BLOB_READ_WRITE_TOKEN`, `CRON_SECRET`
-   (`openssl rand -hex 24`), `GOOGLE_SERVICE_ACCOUNT_JSON`,
-   `GOOGLE_SHARED_DRIVE_ID`, optionally `DRIVE_ROOT_FOLDER_NAME`,
-   `BACKUP_TIME_BUDGET_SECONDS`, `BACKUP_KEEP`.
+   (`openssl rand -hex 24`), `GOOGLE_SERVICE_ACCOUNT_JSON` (raw key JSON or
+   its base64 — a file path cannot be used on Vercel, use the JSON value),
+   `SHARED_DRIVE_ID` and/or `SHARED_DRIVE_NAME`, optionally
+   `DRIVE_ROOT_FOLDER_NAME`, `BACKUP_TIME_BUDGET_SECONDS`, `BACKUP_KEEP`.
 3. Deploy, then check **Settings → Cron Jobs** — both schedules must be
    listed. Cron invocations only run against **production** deployments.
 4. Trigger the first backup manually with the curl above, then watch
@@ -121,7 +123,7 @@ record whether a media file already exists in the live Blob store (by
 
 - `storageQuotaExceeded` from Google means the upload landed in a My Drive
   context instead of the Shared Drive — check that the SA is a member of the
-  Shared Drive and `GOOGLE_SHARED_DRIVE_ID` is the Shared Drive (not a folder
+  Shared Drive and `SHARED_DRIVE_ID` is the Shared Drive (not a folder
   inside it).
 - Drive folder sizes: every backup re-uploads all media, so the two kept
   generations together use roughly 2× the current Blob-store size.

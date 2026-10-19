@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { Transform } from 'node:stream'
 import { google } from 'googleapis'
-import { getEnv, parseServiceAccount } from './env.js'
+import { getEnv, parseServiceAccount, serviceAccountRaw } from './env.js'
 
 // All Drive access goes through one of two implementations behind the same
 // small interface: GoogleDrive (service account into a Workspace Shared
@@ -28,21 +28,73 @@ const escapeQuery = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 let googleDriveSingleton = null
 
 class GoogleDrive {
-  constructor({ serviceAccountJson, sharedDriveId, rootFolderName }) {
+  constructor({ serviceAccountJson, sharedDriveId, sharedDriveName, rootFolderName }) {
     const credentials = parseServiceAccount(serviceAccountJson)
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ['https://www.googleapis.com/auth/drive'],
     })
     this.drive = google.drive({ version: 'v3', auth })
+    this.saEmail = credentials.client_email
     this.sharedDriveId = sharedDriveId
+    this.sharedDriveName = sharedDriveName
+    this.resolvedDriveId = null
+    this.resolvedDriveName = null
     this.rootFolderName = rootFolderName
     this.rootFolderId = null
   }
 
+  // Resolves the Shared Drive: when both ID and name are configured they are
+  // cross-checked, when only one is configured the other is discovered.
+  async resolveSharedDrive() {
+    if (this.resolvedDriveId) return this.resolvedDriveId
+
+    if (this.sharedDriveId) {
+      let data
+      try {
+        const res = await this.drive.drives.get({ driveId: this.sharedDriveId, fields: 'id,name' })
+        data = res.data
+      } catch (err) {
+        throw new Error(
+          `Cannot access Shared Drive ${this.sharedDriveId} as ${this.saEmail}. ` +
+            `Add this service account as a member (Content manager) of the Shared Drive. [${err.message}]`,
+        )
+      }
+      if (this.sharedDriveName && data.name && data.name !== this.sharedDriveName) {
+        throw new Error(
+          `SHARED_DRIVE_ID points at "${data.name}" but SHARED_DRIVE_NAME is "${this.sharedDriveName}" — fix whichever side is wrong`,
+        )
+      }
+      this.resolvedDriveId = data.id
+      this.resolvedDriveName = data.name
+      return this.resolvedDriveId
+    }
+
+    if (this.sharedDriveName) {
+      const res = await this.drive.drives.list({
+        q: `name = '${escapeQuery(this.sharedDriveName)}'`,
+        fields: 'drives(id,name)',
+      })
+      const match = (res.data.drives || []).find((d) => d.name === this.sharedDriveName)
+      if (!match) {
+        const visible = (res.data.drives || []).map((d) => d.name).join(', ') || 'none'
+        throw new Error(
+          `Shared drive "${this.sharedDriveName}" not found for ${this.saEmail} ` +
+            `(drives visible to this service account: ${visible}) — is it a member?`,
+        )
+      }
+      this.resolvedDriveId = match.id
+      this.resolvedDriveName = match.name
+      return this.resolvedDriveId
+    }
+
+    throw new Error('Set SHARED_DRIVE_ID or SHARED_DRIVE_NAME')
+  }
+
   async ensureRootFolder() {
     if (this.rootFolderId) return this.rootFolderId
-    const q = `name = '${escapeQuery(this.rootFolderName)}' and '${escapeQuery(this.sharedDriveId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+    const driveId = await this.resolveSharedDrive()
+    const q = `name = '${escapeQuery(this.rootFolderName)}' and '${escapeQuery(driveId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
     const found = await this.drive.files.list({
       q,
       supportsAllDrives: true,
@@ -58,7 +110,7 @@ class GoogleDrive {
       requestBody: {
         name: this.rootFolderName,
         mimeType: 'application/vnd.google-apps.folder',
-        parents: [this.sharedDriveId],
+        parents: [driveId],
       },
       supportsAllDrives: true,
       fields: 'id',
@@ -129,6 +181,12 @@ class GoogleDrive {
       else await this.deleteFile(child.id)
     }
     await this.deleteFile(folderId)
+  }
+
+  // Download helper used by verification drills: fetch a file's bytes back.
+  async downloadFile(fileId) {
+    const res = await this.drive.files.get({ fileId, alt: 'media', supportsAllDrives: true }, { responseType: 'arraybuffer' })
+    return Buffer.from(res.data)
   }
 }
 
@@ -207,6 +265,10 @@ class LocalDrive {
   async deleteFolderRecursive(folderId) {
     await fsp.rm(this.abs(folderId), { recursive: true, force: true })
   }
+
+  async downloadFile(fileId) {
+    return fsp.readFile(this.abs(fileId))
+  }
 }
 
 export async function getDrive() {
@@ -214,7 +276,12 @@ export async function getDrive() {
     const env = getEnv()
     googleDriveSingleton = env.localDriveDir
       ? new LocalDrive({ dir: env.localDriveDir, rootFolderName: env.rootFolderName })
-      : new GoogleDrive(env)
+      : new GoogleDrive({
+          serviceAccountJson: serviceAccountRaw(),
+          sharedDriveId: env.sharedDriveId,
+          sharedDriveName: env.sharedDriveName,
+          rootFolderName: env.rootFolderName,
+        })
   }
   return googleDriveSingleton
 }
