@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 // The API is always reached same-origin: locally through the Vite dev proxy,
-// in production through the Vercel rewrite that proxies /api to the Render
+// in production through the Vercel rewrite that proxies /api to the company
 // backend. Same-origin keeps the session cookie first-party (required for
 // Safari/iOS, which block all third-party cookies).
 const API_BASE = '/api'

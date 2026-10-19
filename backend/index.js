@@ -17,6 +17,7 @@ import authRoutes from './routes/auth.js'
 import productRoutes from './routes/products.js'
 import problemRoutes from './routes/problems.js'
 import recordRoutes from './routes/records.js'
+import mediaRoutes from './routes/media.js'
 import fileRoutes from './routes/files.js'
 import assignmentRoutes from './routes/assignments.js'
 import notificationRoutes from './routes/notifications.js'
@@ -89,6 +90,7 @@ async function main() {
   app.use('/api/products', productRoutes)
   app.use('/api/problems', problemRoutes)
   app.use('/api/records', recordRoutes)
+  app.use('/api/media', mediaRoutes)
   app.use('/api/files', fileRoutes)
   app.use('/api/assignments', assignmentRoutes)
   app.use('/api/notifications', notificationRoutes)

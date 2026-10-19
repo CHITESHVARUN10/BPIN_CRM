@@ -1,5 +1,6 @@
 import { connect } from './db.js'
-import { audit, notifyUser } from './notify.js'
+import { notifyUser, audit } from './notify.js'
+import { cleanupStagedMedia } from './media.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
@@ -79,11 +80,19 @@ export async function sendDailyAssignmentReminders({ now = new Date() } = {}) {
     sent += 1
   }
 
+  let mediaCleanup
+  try {
+    mediaCleanup = await cleanupStagedMedia(db, { now })
+  } catch (err) {
+    mediaCleanup = { error: err?.message || 'media cleanup failed' }
+  }
+
   return {
     status: 'ok',
     date: dateLabel(now),
     checked: candidates.length,
     sent,
     skipped,
+    mediaCleanup,
   }
 }

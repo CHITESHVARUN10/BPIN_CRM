@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, Copy, Plus } from 'lucide-react'
+import { AlertCircle, Check, Copy, Plus, RotateCcw } from 'lucide-react'
 import api from '../api/client.js'
 import ProductSelect from '../components/ProductSelect.jsx'
 import QRScanner from '../components/QRScanner.jsx'
@@ -8,8 +8,15 @@ import MediaUploader from '../components/MediaUploader.jsx'
 import { Field } from '../components/ui.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { useNotifications } from '../context/NotificationsContext.jsx'
-
-const DRAFT_KEY = 'bpin:draft:new-report'
+import {
+  mediaHasErrors,
+  mediaPayload,
+  mediaPending,
+  newId,
+  reviveDraftMedia,
+  revokeLocalPreviews,
+  serializeDraftMedia,
+} from '../utils/media.js'
 
 const emptyForm = {
   product: null,
@@ -25,9 +32,9 @@ const emptyForm = {
   visitDate: '',
 }
 
-function loadDraft() {
+function loadDraft(key) {
   try {
-    const raw = sessionStorage.getItem(DRAFT_KEY)
+    const raw = sessionStorage.getItem(key)
     if (!raw) return null
     const draft = JSON.parse(raw)
     return draft && typeof draft === 'object' && !draft.submittedAt ? draft : null
@@ -46,19 +53,27 @@ export default function NewReport() {
 
   const [problems, setProblems] = useState([])
   const [problemsLoading, setProblemsLoading] = useState(true)
-  const draft = useRef(loadDraft())
+  const draftKey = assignmentId ? `bpin:draft:new-report:${assignmentId}` : 'bpin:draft:new-report'
+  const draft = useRef(loadDraft(draftKey))
+  const [draftRestored, setDraftRestored] = useState(Boolean(draft.current))
+  const submittedRef = useRef(false)
+  const submissionId = useRef(draft.current?.submissionId || newId())
   const [form, setForm] = useState(() => {
-    const base = draft.current ? { ...emptyForm, ...draft.current } : { ...emptyForm }
+    const saved =
+      draft.current?.form ||
+      (draft.current && Object.prototype.hasOwnProperty.call(draft.current, 'serialNumber') ? draft.current : null)
+    const base = saved ? { ...emptyForm, ...saved } : { ...emptyForm }
     if (!draft.current && assignmentVisitDate) base.visitDate = assignmentVisitDate
     return base
   })
-  const [images, setImages] = useState([])
-  const [videos, setVideos] = useState([])
+  const [images, setImages] = useState(() => reviveDraftMedia(draft.current?.images))
+  const [videos, setVideos] = useState(() => reviveDraftMedia(draft.current?.videos))
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     api
@@ -69,12 +84,37 @@ export default function NewReport() {
   }, [])
 
   useEffect(() => {
+    if (submittedRef.current) return
+    const payload = {
+      form,
+      images: serializeDraftMedia(images),
+      videos: serializeDraftMedia(videos),
+      submissionId: submissionId.current,
+      savedAt: Date.now(),
+    }
+    const hasForm = Boolean(
+      form.product ||
+        form.serialNumber.trim() ||
+        form.vehicleMake.trim() ||
+        form.vehicleModel.trim() ||
+        form.customerReport.trim() ||
+        form.problemId ||
+        form.isOther ||
+        form.problemOtherTitle.trim() ||
+        form.problemOtherDescription.trim() ||
+        form.notes.trim() ||
+        form.visitDate,
+    )
     try {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form))
+      if (hasForm || payload.images.length || payload.videos.length) {
+        sessionStorage.setItem(draftKey, JSON.stringify(payload))
+      } else {
+        sessionStorage.removeItem(draftKey)
+      }
     } catch {
       // storage full/unavailable — draft simply won't persist
     }
-  }, [form])
+  }, [form, images, videos, draftKey])
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }))
 
@@ -93,64 +133,79 @@ export default function NewReport() {
     return Object.keys(errs).length === 0
   }
 
-  const submit = async (e) => {
-    e.preventDefault()
+  const saveReport = async () => {
     if (!validate()) return
+    const allMedia = [...images, ...videos]
+    if (mediaPending(allMedia)) {
+      setSaveError('Media is still uploading. Wait for it to finish, then save the report.')
+      return
+    }
+    if (mediaHasErrors(allMedia)) {
+      setSaveError('Some media failed to upload. Retry or remove those files, then save the report.')
+      return
+    }
+
+    setSaveError('')
     setSubmitting(true)
     try {
-      const fd = new FormData()
-      fd.append('sku', form.product.sku)
-      fd.append('serialNumber', form.serialNumber.trim())
-      fd.append('customerReport', form.customerReport.trim())
-      if (form.isOther) {
-        fd.append('isOther', 'true')
-        fd.append('problemOtherTitle', form.problemOtherTitle.trim())
-        fd.append('problemOtherDescription', form.problemOtherDescription.trim())
-      } else {
-        fd.append('problemId', form.problemId)
+      const payload = {
+        sku: form.product.sku,
+        serialNumber: form.serialNumber.trim(),
+        customerReport: form.customerReport.trim(),
+        isOther: form.isOther,
+        notes: form.notes.trim(),
+        vehicleMake: form.vehicleMake.trim(),
+        vehicleModel: form.vehicleModel.trim(),
+        images: mediaPayload(images),
+        videos: mediaPayload(videos),
+        submissionId: submissionId.current,
       }
-      fd.append('notes', form.notes.trim())
-      fd.append('vehicleMake', form.vehicleMake.trim())
-      fd.append('vehicleModel', form.vehicleModel.trim())
-      if (form.visitDate) fd.append('visitDate', form.visitDate)
-      if (assignmentId) fd.append('assignmentId', assignmentId)
-      for (const img of images) fd.append('images', img.file)
-      for (const vid of videos) fd.append('videos', vid.file)
+      if (form.isOther) {
+        payload.problemOtherTitle = form.problemOtherTitle.trim()
+        payload.problemOtherDescription = form.problemOtherDescription.trim()
+      } else {
+        payload.problemId = form.problemId
+      }
+      if (form.visitDate) payload.visitDate = form.visitDate
+      if (assignmentId) payload.assignmentId = assignmentId
 
-      const res = await api.post('/records', fd)
+      const res = await api.post('/records', payload)
+      submittedRef.current = true
+      sessionStorage.removeItem(draftKey)
       setResult(res.data.record)
-      sessionStorage.removeItem(DRAFT_KEY)
-      for (const img of images) URL.revokeObjectURL(img.previewUrl)
-      for (const vid of videos) URL.revokeObjectURL(vid.previewUrl)
+      revokeLocalPreviews(images)
+      revokeLocalPreviews(videos)
       setImages([])
       setVideos([])
-      setForm(emptyForm)
+      setForm({ ...emptyForm })
       push(`Report filed · ${res.data.record.tokenNo}`)
     } catch (err) {
-      push(err.response?.data?.message || 'Could not file the report', 'error')
+      const message = err.response?.data?.message || 'We could not save the report.'
+      setSaveError(`${message} Your draft and uploaded media are saved on this device — retry when ready.`)
+      push(message, 'error')
     } finally {
       setSubmitting(false)
     }
   }
 
+  const submit = (e) => {
+    e.preventDefault()
+    saveReport()
+  }
+
   const reset = () => {
+    submittedRef.current = false
+    submissionId.current = newId()
+    setSaveError('')
     setResult(null)
+    revokeLocalPreviews(images)
+    revokeLocalPreviews(videos)
     setImages([])
     setVideos([])
     setCopied(false)
-    setForm({
-      product: null,
-      serialNumber: '',
-      vehicleMake: '',
-      vehicleModel: '',
-      customerReport: '',
-      problemId: '',
-      isOther: false,
-      problemOtherTitle: '',
-      problemOtherDescription: '',
-      notes: '',
-      visitDate: '',
-    })
+    setDraftRestored(false)
+    setForm({ ...emptyForm })
+    sessionStorage.removeItem(draftKey)
     refresh()
   }
 
@@ -192,12 +247,22 @@ export default function NewReport() {
     )
   }
 
+  const mediaUploading = mediaPending([...images, ...videos])
+
   return (
     <form onSubmit={submit} className="space-y-5" noValidate>
       <div>
         <h1 className="text-xl font-semibold tracking-tight">New Assessment</h1>
         <p className="text-[13px] text-zinc-500 mt-0.5">A token number is generated on submit.</p>
       </div>
+
+      {draftRestored ? (
+        <div className="card border border-amber-200 bg-amber-50/60 p-3.5">
+          <p className="text-[12.5px] text-amber-900">
+            Draft restored from this device. Uploaded photos and videos are still attached.
+          </p>
+        </div>
+      ) : null}
 
       <section className="space-y-3">
         <h2 className="section-title">1 · Product</h2>
@@ -312,13 +377,29 @@ export default function NewReport() {
         </div>
       </section>
 
-      <button type="submit" className="btn w-full !min-h-[52px] !text-[15px]" disabled={submitting}>
-        {submitting ? (
-          <span className="inline-flex items-center gap-2">Submitting…</span>
+      {saveError ? (
+        <div className="card border border-red-200 bg-red-50/60 p-3.5">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle size={17} className="text-red-600 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[12.5px] text-red-900">{saveError}</p>
+              <button type="button" className="btn btn-sm mt-2" onClick={saveReport} disabled={submitting}>
+                <RotateCcw size={13} />
+                Retry save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <button type="submit" className="btn w-full !min-h-[52px] !text-[15px]" disabled={submitting || mediaUploading}>
+        {submitting || mediaUploading ? (
+          <span className="inline-flex items-center gap-2">{mediaUploading ? 'Uploading media…' : 'Submitting…'}</span>
         ) : (
           'Submit assessment'
         )}
       </button>
+      <p className="text-center text-[11px] text-zinc-400">Drafts save automatically on this device.</p>
 
       {scanning && (
         <QRScanner

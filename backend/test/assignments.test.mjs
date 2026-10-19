@@ -43,19 +43,21 @@ async function call(path, { user = 'tech', method = 'GET', body } = {}) {
   return { status: res.status, body: data }
 }
 
-async function fileReport({ user = 'tech', assignmentId, serialNumber = 'SN-1' }) {
-  const form = new FormData()
-  form.append('sku', product.sku)
-  form.append('serialNumber', serialNumber)
-  form.append('customerReport', 'Customer reported a fault')
-  form.append('problemId', String(problem._id))
-  form.append('visitDate', '2026-10-19')
-  if (assignmentId) form.append('assignmentId', String(assignmentId))
-
+async function fileReport({ user = 'tech', assignmentId, serialNumber = 'SN-1', submissionId } = {}) {
   const res = await fetch(base + '/api/records', {
     method: 'POST',
-    headers: { 'x-test-user': user },
-    body: form,
+    headers: { 'content-type': 'application/json', 'x-test-user': user },
+    body: JSON.stringify({
+      sku: product.sku,
+      serialNumber,
+      customerReport: 'Customer reported a fault',
+      problemId: String(problem._id),
+      visitDate: '2026-10-19',
+      ...(assignmentId ? { assignmentId: String(assignmentId) } : {}),
+      ...(submissionId ? { submissionId } : {}),
+      images: [],
+      videos: [],
+    }),
   })
   const data = await res.json().catch(() => null)
   return { status: res.status, body: data }
@@ -120,7 +122,7 @@ after(async () => {
 })
 
 test('filing a report from an assignment links and completes it', async () => {
-  const res = await fileReport({ assignmentId: linkedAssignment._id, serialNumber: 'SN-LINKED' })
+  const res = await fileReport({ assignmentId: linkedAssignment._id, serialNumber: 'SN-LINKED', submissionId: 'submission-linked-1' })
   assert.equal(res.status, 201, JSON.stringify(res.body))
 
   const record = await ServiceRecord.findOne({ tokenNo: res.body.record.tokenNo })
@@ -141,6 +143,18 @@ test('filing a report from an assignment links and completes it', async () => {
   assert.equal(myList.status, 200)
   const myItem = myList.body.items.find((item) => item._id === String(linkedAssignment._id))
   assert.equal(myItem.reportFiled, true)
+})
+
+test('retrying the same submission id returns the existing record', async () => {
+  const record = await ServiceRecord.findOne({ submissionId: 'submission-linked-1' })
+  const res = await fileReport({
+    assignmentId: linkedAssignment._id,
+    serialNumber: 'SN-LINKED',
+    submissionId: 'submission-linked-1',
+  })
+  assert.equal(res.status, 200, JSON.stringify(res.body))
+  assert.equal(res.body.record.tokenNo, record.tokenNo)
+  assert.equal(await ServiceRecord.countDocuments({ submissionId: 'submission-linked-1' }), 1)
 })
 
 test('the same assignment cannot produce a second linked report', async () => {
@@ -170,4 +184,48 @@ test('manual status changes cannot bypass the linked report rule', async () => {
     body: { status: 'pending' },
   })
   assert.equal(reopenLinked.status, 400, JSON.stringify(reopenLinked.body))
+})
+
+test('closing a record accepts JSON and is idempotent', async () => {
+  const record = await ServiceRecord.findOne({ submissionId: 'submission-linked-1' })
+  const body = { workDone: 'Fixed and tested the unit', submissionId: 'close-submission-1' }
+
+  const first = await call(`/api/records/${record._id}/close`, { user: 'tech', method: 'POST', body })
+  assert.equal(first.status, 200, JSON.stringify(first.body))
+  assert.equal(first.body.record.status, 'closed')
+
+  const replay = await call(`/api/records/${record._id}/close`, { user: 'tech', method: 'POST', body })
+  assert.equal(replay.status, 200, JSON.stringify(replay.body))
+  assert.equal(replay.body.record.replay, true)
+})
+
+test('follow-up accepts JSON and is idempotent', async () => {
+  const record = await ServiceRecord.create({
+    tokenNo: 'FOLLOW-TEST-1',
+    technician: accounts.tech._id,
+    productSnapshot: { sku: product.sku, description: product.description },
+    serialNumber: 'SN-FOLLOW',
+    customerReport: 'Initial report',
+    problem: { ref: problem._id, name: problem.name },
+    images: [],
+  })
+  const body = {
+    customerReport: 'Follow-up visit completed',
+    problemId: String(problem._id),
+    notes: 'Checked again',
+    submissionId: 'follow-submission-1',
+    images: [],
+    videos: [],
+  }
+
+  const first = await call(`/api/records/${record._id}/follow-up`, { user: 'tech', method: 'POST', body })
+  assert.equal(first.status, 200, JSON.stringify(first.body))
+
+  const replay = await call(`/api/records/${record._id}/follow-up`, { user: 'tech', method: 'POST', body })
+  assert.equal(replay.status, 200, JSON.stringify(replay.body))
+  assert.equal(replay.body.record.replay, true)
+
+  const saved = await ServiceRecord.findById(record._id)
+  assert.equal(saved.followUps.length, 1)
+  assert.equal(saved.followUps[0].submissionId, 'follow-submission-1')
 })

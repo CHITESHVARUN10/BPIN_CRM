@@ -1,22 +1,58 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, Loader2 } from 'lucide-react'
+import { AlertCircle, Check, Loader2, RotateCcw } from 'lucide-react'
 import api from '../api/client.js'
 import MediaUploader from '../components/MediaUploader.jsx'
 import { EmptyState, Field, SkeletonRows } from '../components/ui.jsx'
 import { useToast } from '../context/ToastContext.jsx'
+import {
+  mediaHasErrors,
+  mediaPayload,
+  mediaPending,
+  newId,
+  reviveDraftMedia,
+  revokeLocalPreviews,
+  serializeDraftMedia,
+} from '../utils/media.js'
+
+const emptyForm = {
+  customerReport: '',
+  problemId: '',
+  isOther: false,
+  problemOtherTitle: '',
+  problemOtherDescription: '',
+  notes: '',
+}
+
+function loadDraft(key) {
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return null
+    const draft = JSON.parse(raw)
+    return draft && typeof draft === 'object' ? draft : null
+  } catch {
+    return null
+  }
+}
 
 export default function FollowUp() {
   const { id } = useParams()
   const push = useToast().push
+  const draftKey = `bpin:draft:follow-up:${id}`
+  const draft = useRef(loadDraft(draftKey))
+  const submittedRef = useRef(false)
+  const submissionId = useRef(draft.current?.submissionId || newId())
+  const [draftRestored] = useState(Boolean(draft.current))
+
   const [record, setRecord] = useState(null)
   const [loading, setLoading] = useState(true)
   const [missing, setMissing] = useState(false)
   const [problems, setProblems] = useState([])
-  const [form, setForm] = useState({ customerReport: '', problemId: '', isOther: false, problemOtherTitle: '', problemOtherDescription: '', notes: '' })
-  const [images, setImages] = useState([])
-  const [videos, setVideos] = useState([])
+  const [form, setForm] = useState(() => ({ ...emptyForm, ...draft.current?.form }))
+  const [images, setImages] = useState(() => reviveDraftMedia(draft.current?.images))
+  const [videos, setVideos] = useState(() => reviveDraftMedia(draft.current?.videos))
   const [errors, setErrors] = useState({})
+  const [saveError, setSaveError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(null)
 
@@ -36,10 +72,37 @@ export default function FollowUp() {
     })
   }, [id])
 
+  useEffect(() => {
+    if (submittedRef.current) return
+    const payload = {
+      form,
+      images: serializeDraftMedia(images),
+      videos: serializeDraftMedia(videos),
+      submissionId: submissionId.current,
+      savedAt: Date.now(),
+    }
+    const hasForm = Boolean(
+      form.customerReport.trim() ||
+        form.problemId ||
+        form.isOther ||
+        form.problemOtherTitle.trim() ||
+        form.problemOtherDescription.trim() ||
+        form.notes.trim(),
+    )
+    try {
+      if (hasForm || payload.images.length || payload.videos.length) {
+        sessionStorage.setItem(draftKey, JSON.stringify(payload))
+      } else {
+        sessionStorage.removeItem(draftKey)
+      }
+    } catch {
+      // storage full/unavailable — draft simply won't persist
+    }
+  }, [form, images, videos, draftKey])
+
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }))
 
-  const submit = async (e) => {
-    e.preventDefault()
+  const saveFollowUp = async () => {
     const errs = {}
     if (!form.customerReport.trim()) errs.customerReport = 'Describe what was observed on this visit'
     if (form.isOther) {
@@ -51,29 +114,55 @@ export default function FollowUp() {
     setErrors(errs)
     if (Object.keys(errs).length) return
 
+    const allMedia = [...images, ...videos]
+    if (mediaPending(allMedia)) {
+      setSaveError('Media is still uploading. Wait for it to finish, then save the follow-up.')
+      return
+    }
+    if (mediaHasErrors(allMedia)) {
+      setSaveError('Some media failed to upload. Retry or remove those files, then save the follow-up.')
+      return
+    }
+
+    setSaveError('')
     setSubmitting(true)
     try {
-      const fd = new FormData()
-      fd.append('customerReport', form.customerReport.trim())
-      if (form.isOther) {
-        fd.append('isOther', 'true')
-        fd.append('problemOtherTitle', form.problemOtherTitle.trim())
-        fd.append('problemOtherDescription', form.problemOtherDescription.trim())
-      } else {
-        fd.append('problemId', form.problemId)
+      const payload = {
+        customerReport: form.customerReport.trim(),
+        isOther: form.isOther,
+        notes: form.notes.trim(),
+        images: mediaPayload(images),
+        videos: mediaPayload(videos),
+        submissionId: submissionId.current,
       }
-      fd.append('notes', form.notes.trim())
-      for (const img of images) fd.append('images', img.file)
-      for (const vid of videos) fd.append('videos', vid.file)
+      if (form.isOther) {
+        payload.problemOtherTitle = form.problemOtherTitle.trim()
+        payload.problemOtherDescription = form.problemOtherDescription.trim()
+      } else {
+        payload.problemId = form.problemId
+      }
 
-      const res = await api.post(`/records/${id}/follow-up`, fd)
+      const res = await api.post(`/records/${id}/follow-up`, payload)
+      submittedRef.current = true
+      sessionStorage.removeItem(draftKey)
+      revokeLocalPreviews(images)
+      revokeLocalPreviews(videos)
+      setImages([])
+      setVideos([])
       setDone(res.data.record)
       push('Follow-up added')
     } catch (err) {
-      push(err.response?.data?.message || 'Could not save the follow-up', 'error')
+      const message = err.response?.data?.message || 'Could not save the follow-up'
+      setSaveError(`${message} Your draft and uploaded media are saved on this device — retry when ready.`)
+      push(message, 'error')
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const submit = (e) => {
+    e.preventDefault()
+    saveFollowUp()
   }
 
   if (loading) {
@@ -107,12 +196,22 @@ export default function FollowUp() {
     )
   }
 
+  const mediaUploading = mediaPending([...images, ...videos])
+
   return (
     <form onSubmit={submit} className="space-y-5" noValidate>
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Follow-up assessment</h1>
         <p className="text-[13px] text-zinc-500 mt-0.5">Record {record.tokenNo} · file it on the same or next visit</p>
       </div>
+
+      {draftRestored ? (
+        <div className="card border border-amber-200 bg-amber-50/60 p-3.5">
+          <p className="text-[12.5px] text-amber-900">
+            Draft restored from this device. Uploaded photos and videos are still attached.
+          </p>
+        </div>
+      ) : null}
 
       <div className="card p-4">
         <p className="text-[12px] font-medium text-zinc-400 uppercase tracking-wide">Product</p>
@@ -184,10 +283,26 @@ export default function FollowUp() {
         <MediaUploader images={images} onImagesChange={setImages} videos={videos} onVideosChange={setVideos} />
       </div>
 
-      <button type="submit" className="btn w-full !min-h-[52px] !text-[15px]" disabled={submitting}>
-        {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
-        Add follow-up assessment
+      {saveError ? (
+        <div className="card border border-red-200 bg-red-50/60 p-3.5">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle size={17} className="text-red-600 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[12.5px] text-red-900">{saveError}</p>
+              <button type="button" className="btn btn-sm mt-2" onClick={saveFollowUp} disabled={submitting}>
+                <RotateCcw size={13} />
+                Retry save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <button type="submit" className="btn w-full !min-h-[52px] !text-[15px]" disabled={submitting || mediaUploading}>
+        {submitting || mediaUploading ? <Loader2 size={16} className="animate-spin" /> : null}
+        {mediaUploading ? 'Uploading media…' : 'Add follow-up assessment'}
       </button>
+      <p className="text-center text-[11px] text-zinc-400">Drafts save automatically on this device.</p>
     </form>
   )
 }

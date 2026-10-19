@@ -3,7 +3,7 @@
 Field-service CRM for Blaupunkt India (BPIN): service engineers file visit/assessment reports on products, admins monitor, analyze, remind (push notifications), and export reports.
 
 - **Frontend** — Vite + React + Tailwind v4 (`frontend/`), mobile-first (Android/iOS), monochrome Blaupunkt design
-- **Backend** — Node + Express 5 (`backend/`), MongoDB Atlas + Mongoose, Passport local strategy with **session cookies** (no tokens), Multer → **private Vercel Blob** for photos and short videos, Web Push for reminders
+- **Backend** — Node + Express 5 (`backend/`), MongoDB Atlas + Mongoose, Passport local strategy with **session cookies** (no tokens), direct browser → **private Vercel Blob** uploads for photos and short videos (backend issues short-lived upload tokens and verifies metadata), Web Push for reminders
 - **Reports** — per-day/technician/model/problem aggregations, **CSV + PDF export** with the Blaupunkt logo
 
 ## Visit form
@@ -46,7 +46,7 @@ Edit `backend/.env`:
 |---|---|
 | `MONGODB_URI_NEW` | Company MongoDB Atlas connection string (keep `/BPIN` as database name) — **required** (legacy `mongo_uri_txt` only acts as fallback) |
 | `SESSION_SECRET` | Already generated; rotate for production |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob **private** store read/write token — **required for photo/video upload** (app still works without media if blank) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob **private** store read/write token — **required for direct photo/video uploads and `/api/files` streaming** (app still works without media if blank) |
 | `VAPID_*` | Optional: `npx web-push generate-vapid-keys` — enables real push notifications; in-app bell works without it |
 | `ADMIN_EMAIL/PASSWORD` | Super-admin email + the password to give seeded admins (choose your own; values never live in this repo) |
 | `TECH_DEFAULT_PASSWORD` | Login password for the 13 seeded engineers — pick your own; admins can reset per user in the app |

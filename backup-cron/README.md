@@ -24,7 +24,7 @@ Three Vercel cron entries hit the project's production URL:
 |---|---|---|
 | `GET /api/start` | `0 3 1 * *` (1st of month, 08:30 IST) | Creates a run: makes the Drive folder, enumerates all items, writes the starting manifest. Refuses to start if a run is already active. |
 | `GET /api/work` | `*/10 * * * *` | Worker ticks: uploads pending items inside a ~660s budget, then finalizes, rotates old backups and rewrites the index. Exits in under a second when there is nothing to do. It also **catches up** (starts a run automatically) if the last completed backup is older than 32 days, and automatically retries failed backups. |
-| `GET /api/reminders` | `30 6 * * *` (daily, 12:00 IST) | Finds today's assignments with no linked service report, sends the engineer an in-app reminder, and writes an `assignment_report_missing` audit entry. Idempotent per assignment per day. |
+| `GET /api/reminders` | `30 6 * * *` (daily, 12:00 IST) | Finds today's assignments with no linked service report, sends the engineer an in-app reminder, writes an `assignment_report_missing` audit entry, and deletes unreferenced staged media older than 24 hours. Idempotent per assignment per day. |
 
 All three endpoints require `Authorization: Bearer <CRON_SECRET>`; Vercel sends
 that automatically for cron invocations. Manual trigger:

@@ -1,6 +1,5 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
-import multer from 'multer'
 import ServiceRecord from '../models/ServiceRecord.js'
 import Assignment from '../models/Assignment.js'
 import Product from '../models/Product.js'
@@ -10,7 +9,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js'
 import { nextToken } from '../utils/token.js'
 import { escapeRx } from '../utils/common.js'
 import { startOfDay, startOfMonth, parseBounds } from '../utils/dates.js'
-import { storageEnabled, uploadMedia } from '../utils/blob.js'
+import { resolveUploadedMedia } from '../utils/blob.js'
 import { logAudit, ACTIONS } from '../utils/log.js'
 import Notification from '../models/Notification.js'
 import { sendToUser } from '../utils/push.js'
@@ -18,57 +17,39 @@ import { formatDateLabel } from '../utils/dates.js'
 
 const router = Router()
 
-const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime'])
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024, files: 5 },
-  fileFilter: (req, file, cb) => {
-    if (file.fieldname === 'videos') {
-      if (VIDEO_TYPES.has(file.mimetype)) return cb(null, true)
-      const err = new Error('Only MP4, WebM or MOV videos are allowed')
-      err.status = 400
-      return cb(err)
-    }
-    if (IMAGE_TYPES.has(file.mimetype)) return cb(null, true)
-    const err = new Error('Only JPEG, PNG or WebP images are allowed')
-    err.status = 400
-    return cb(err)
-  },
-})
-const uploadMediaFiles = upload.fields([
-  { name: 'images', maxCount: 4 },
-  { name: 'videos', maxCount: 1 },
-])
-
-async function collectMedia(req) {
-  const images = req.files?.images || []
-  const videos = req.files?.videos || []
-  if ((images.length || videos.length) && !storageEnabled()) {
-    const err = new Error('Media upload is not configured on the server')
-    err.status = 400
-    throw err
+async function linkAssignment(assignmentId, record, user) {
+  if (!assignmentId || !mongoose.isValidObjectId(assignmentId)) return
+  const assignment = await Assignment.findById(assignmentId)
+  if (!assignment) return
+  if (String(assignment.assignedTo) !== String(user._id)) return
+  if (assignment.serviceRecord) {
+    if (String(assignment.serviceRecord) === String(record._id)) return
+    return
   }
-  const media = []
-  for (const file of images) {
-    if (file.size > 10 * 1024 * 1024) {
-      const err = new Error('Each photo must be under 10MB')
-      err.status = 400
-      throw err
-    }
-    media.push(await uploadMedia(file.buffer, { contentType: file.mimetype, kind: 'image' }))
-  }
-  for (const file of videos) {
-    media.push(await uploadMedia(file.buffer, { contentType: file.mimetype, kind: 'video' }))
-  }
-  return media
+  await Assignment.updateOne(
+    { _id: assignment._id, serviceRecord: null },
+    { $set: { serviceRecord: record._id, status: 'done', doneAt: new Date(), updatedAt: new Date() } },
+  )
+  await logAudit(user, ACTIONS.assignmentUpdated, { kind: 'assignment', id: assignment._id, label: `${assignment.customerName} → ${user.name}` }, `Report filed: ${record.tokenNo}`)
 }
 
-router.post('/', requireAuth, uploadMediaFiles, async (req, res, next) => {
+router.post('/', requireAuth, async (req, res, next) => {
   try {
     const body = req.body
     const serial = String(body.serialNumber || '').trim()
     if (!serial) return res.status(400).json({ message: 'Serial number is required' })
+
+    const submissionId = String(body.submissionId || '').trim()
+    if (submissionId) {
+      const existing = await ServiceRecord.findOne({ submissionId }).lean()
+      if (existing) {
+        if (String(existing.technician) !== String(req.user._id)) {
+          return res.status(409).json({ message: 'This submission belongs to another account' })
+        }
+        await linkAssignment(String(body.assignmentId || '').trim(), existing, req.user)
+        return res.status(200).json({ record: { _id: existing._id, tokenNo: existing.tokenNo, serialNumber: existing.serialNumber, replay: true } })
+      }
+    }
 
     const product = await Product.findOne({ sku: String(body.sku || '').trim() }).lean()
     if (!product) return res.status(404).json({ message: 'Unknown SKU' })
@@ -90,13 +71,12 @@ router.post('/', requireAuth, uploadMediaFiles, async (req, res, next) => {
       problemSub = { ref: problem._id, name: problem.name, isOther: false }
     }
 
-    let assignment = null
     const assignmentId = String(body.assignmentId || '').trim()
     if (assignmentId) {
       if (!mongoose.isValidObjectId(assignmentId)) {
         return res.status(400).json({ message: 'Invalid assignment' })
       }
-      assignment = await Assignment.findById(assignmentId)
+      const assignment = await Assignment.findById(assignmentId).lean()
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' })
       if (String(assignment.assignedTo) !== String(req.user._id)) {
         return res.status(403).json({ message: 'This assignment is not assigned to you' })
@@ -106,10 +86,14 @@ router.post('/', requireAuth, uploadMediaFiles, async (req, res, next) => {
       }
     }
 
-    const uploads = await collectMedia(req)
+    const userId = String(req.user._id)
+    const images = await resolveUploadedMedia(body.images, { userId, kind: 'image', maxCount: 4 })
+    const videos = await resolveUploadedMedia(body.videos, { userId, kind: 'video', maxCount: 1 })
+    const uploads = [...images, ...videos]
 
     const create = async () => ServiceRecord.create({
       tokenNo: await nextToken(),
+      submissionId: submissionId || undefined,
       technician: req.user._id,
       product: product._id,
       productSnapshot: { sku: product.sku, description: product.description, category: product.category },
@@ -126,19 +110,23 @@ router.post('/', requireAuth, uploadMediaFiles, async (req, res, next) => {
     try {
       record = await create()
     } catch (err) {
+      if (err?.code === 11000 && err?.keyPattern?.submissionId && submissionId) {
+        const existing = await ServiceRecord.findOne({ submissionId }).lean()
+        if (existing) {
+          if (String(existing.technician) !== String(req.user._id)) {
+            return res.status(409).json({ message: 'This submission belongs to another account' })
+          }
+          await linkAssignment(assignmentId, existing, req.user)
+          return res.status(200).json({ record: { _id: existing._id, tokenNo: existing.tokenNo, serialNumber: existing.serialNumber, replay: true } })
+        }
+      }
       if (err?.code === 11000 && err?.keyPattern?.tokenNo) record = await create()
       else throw err
     }
 
     await logAudit(req.user, ACTIONS.caseCreated, { kind: 'record', id: record._id, label: record.tokenNo }, `${product.sku} · ${problemSub.name}`)
 
-    if (assignment) {
-      await Assignment.updateOne(
-        { _id: assignment._id, serviceRecord: null },
-        { $set: { serviceRecord: record._id, status: 'done', doneAt: new Date(), updatedAt: new Date() } },
-      )
-      await logAudit(req.user, ACTIONS.assignmentUpdated, { kind: 'assignment', id: assignment._id, label: `${assignment.customerName} → ${req.user.name}` }, `Report filed: ${record.tokenNo}`)
-    }
+    if (assignmentId) await linkAssignment(assignmentId, record, req.user)
 
     return res.status(201).json({ record: { _id: record._id, tokenNo: record.tokenNo, serialNumber: record.serialNumber } })
   } catch (err) {
@@ -146,28 +134,37 @@ router.post('/', requireAuth, uploadMediaFiles, async (req, res, next) => {
   }
 })
 
-router.post('/:id/close', requireAuth, uploadMediaFiles, async (req, res, next) => {
+router.post('/:id/close', requireAuth, async (req, res, next) => {
   try {
     const record = await ServiceRecord.findById(req.params.id)
     if (!record) return res.status(404).json({ message: 'Record not found' })
     if (String(record.technician) !== String(req.user._id) && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Only the opening service engineer or an admin can close this case' })
     }
+
+    const body = req.body || {}
+    const submissionId = String(body.submissionId || '').trim()
     if (record.status === 'closed') {
+      if (submissionId && record.closure?.submissionId === submissionId) {
+        return res.json({ record: { _id: record._id, tokenNo: record.tokenNo, status: record.status, replay: true } })
+      }
       return res.status(400).json({ message: 'This case is already closed' })
     }
 
-    const workDone = String(req.body.workDone || '').trim()
+    const workDone = String(body.workDone || '').trim()
     if (!workDone) return res.status(400).json({ message: 'Please describe the work done before closing' })
 
-    const uploads = await collectMedia(req)
+    const userId = String(req.user._id)
+    const images = await resolveUploadedMedia(body.images, { userId, kind: 'image', maxCount: 4 })
+    const videos = await resolveUploadedMedia(body.videos, { userId, kind: 'video', maxCount: 1 })
 
     record.closure = {
       closedBy: req.user._id,
       closedByRole: req.user.role,
       closedByName: req.user.name,
       workDone,
-      images: uploads,
+      images: [...images, ...videos],
+      submissionId: submissionId || undefined,
       closedAt: new Date(),
     }
     record.status = 'closed'
@@ -335,18 +332,26 @@ router.get('/:id', requireAuth, async (req, res, next) => {
   }
 })
 
-router.post('/:id/follow-up', requireAuth, uploadMediaFiles, async (req, res, next) => {
+router.post('/:id/follow-up', requireAuth, async (req, res, next) => {
   try {
     const record = await ServiceRecord.findById(req.params.id)
     if (!record) return res.status(404).json({ message: 'Record not found' })
     if (String(record.technician) !== String(req.user._id) && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Forbidden' })
     }
+
+    const body = req.body || {}
+    const submissionId = String(body.submissionId || '').trim()
+    if (submissionId) {
+      const existing = record.followUps.find((f) => f.submissionId === submissionId)
+      if (existing) {
+        return res.json({ record: { _id: record._id, tokenNo: record.tokenNo, status: record.status, replay: true } })
+      }
+    }
     if (record.status === 'closed') {
       return res.status(400).json({ message: 'This record is already closed' })
     }
 
-    const body = req.body
     const customerReport = String(body.customerReport || '').trim()
     if (!customerReport) return res.status(400).json({ message: 'Customer reported problem is required' })
 
@@ -364,14 +369,17 @@ router.post('/:id/follow-up', requireAuth, uploadMediaFiles, async (req, res, ne
       problemSub = { ref: problem._id, name: problem.name, isOther: false }
     }
 
-    const uploads = await collectMedia(req)
+    const userId = String(req.user._id)
+    const images = await resolveUploadedMedia(body.images, { userId, kind: 'image', maxCount: 4 })
+    const videos = await resolveUploadedMedia(body.videos, { userId, kind: 'video', maxCount: 1 })
 
     const closes = String(body.closes || '').toLowerCase() === 'true' || body.closes === true
     record.followUps.push({
       customerReport,
       problem: problemSub,
       notes: String(body.notes || '').trim(),
-      images: uploads,
+      images: [...images, ...videos],
+      submissionId: submissionId || undefined,
       closes,
       filedAt: new Date(),
     })

@@ -12,6 +12,7 @@ const mediaItem = {
 const serviceRecordSchema = new mongoose.Schema(
   {
     tokenNo: { type: String, required: true, unique: true },
+    submissionId: { type: String, trim: true, unique: true, sparse: true },
     technician: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
     productSnapshot: {
@@ -44,6 +45,7 @@ const serviceRecordSchema = new mongoose.Schema(
         closedByName: { type: String, trim: true },
         workDone: { type: String, trim: true },
         images: [mediaItem],
+        submissionId: { type: String, trim: true },
         closedAt: { type: Date },
       },
       default: null,
@@ -59,6 +61,7 @@ const serviceRecordSchema = new mongoose.Schema(
         },
         notes: { type: String, trim: true },
         images: [mediaItem],
+        submissionId: { type: String, trim: true },
         closes: { type: Boolean, default: false },
         filedAt: { type: Date, default: Date.now },
       },

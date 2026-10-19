@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream'
-import { get, list } from '@vercel/blob'
+import { del, get, list } from '@vercel/blob'
 import { getEnv } from './env.js'
 
 export async function listAllBlobs() {
@@ -63,4 +63,43 @@ export async function buildBlobRefMap(db) {
     )
   }
   return map
+}
+
+// Direct client uploads are staged under bpin/tmp/<userId>/. Once a report is
+// saved, the pathname is referenced by a ServiceRecord and is skipped forever.
+// Unreferenced staged blobs older than the TTL are safe to remove.
+export async function cleanupStagedMedia(db, { now = new Date(), olderThanMs = 24 * 60 * 60 * 1000 } = {}) {
+  const token = getEnv().blobToken
+  if (!token) return { scanned: 0, deleted: 0, skipped: 0 }
+
+  const refs = await buildBlobRefMap(db)
+  let cursor
+  let scanned = 0
+  let deleted = 0
+  let skipped = 0
+
+  do {
+    const page = await list({ token, prefix: 'bpin/tmp/', cursor })
+    for (const blob of page.blobs) {
+      scanned += 1
+      if (refs.has(blob.pathname)) {
+        skipped += 1
+        continue
+      }
+      const uploadedAt = blob.uploadedAt ? new Date(blob.uploadedAt) : null
+      if (!uploadedAt || now.getTime() - uploadedAt.getTime() < olderThanMs) {
+        skipped += 1
+        continue
+      }
+      try {
+        await del(blob.pathname, { token })
+        deleted += 1
+      } catch {
+        skipped += 1
+      }
+    }
+    cursor = page.cursor
+  } while (cursor)
+
+  return { scanned, deleted, skipped }
 }
