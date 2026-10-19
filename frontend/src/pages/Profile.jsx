@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { KeyRound, Loader2 } from 'lucide-react'
 import api from '../api/client.js'
 import { Field, PushEnable } from '../components/ui.jsx'
+import PasswordInput from '../components/PasswordInput.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 
@@ -83,13 +84,13 @@ export default function Profile() {
           <h2 className="text-sm font-semibold text-zinc-900">Change password</h2>
         </div>
         <Field label="Current password" required error={errors.current}>
-          <input type="password" className="input" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" />
+          <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" />
         </Field>
         <Field label="New password" required error={errors.next}>
-          <input type="password" className="input" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
+          <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
         </Field>
         <Field label="Confirm new password" required error={errors.confirm}>
-          <input type="password" className="input" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+          <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
         </Field>
         <button type="submit" className="btn w-full" disabled={busy}>
           {busy ? <Loader2 size={15} className="animate-spin" /> : null}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { X, UserPlus, ShieldAlert } from 'lucide-react'
 import api from '../api/client.js'
 import { EmptyState, SkeletonRows, formatDate, ConfirmDialog } from '../components/ui.jsx'
+import PasswordInput from '../components/PasswordInput.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 
@@ -203,7 +204,7 @@ export default function AdminUsers() {
             </div>
             <div>
               <label className="label">Password<span className="text-red-600 ml-0.5">*</span></label>
-              <input className="input" type="text" value={form.password} onChange={(e) => set('password', e.target.value)} placeholder="min 6 characters" />
+              <PasswordInput value={form.password} onChange={(e) => set('password', e.target.value)} placeholder="min 6 characters" />
             </div>
           </div>
           {formErr ? <p className="text-[13px] text-red-600">{formErr}</p> : null}
@@ -231,7 +232,7 @@ export default function AdminUsers() {
         >
           <div>
             <label className="label">New password<span className="text-red-600 ml-0.5">*</span></label>
-            <input className="input" type="text" value={pwdVal} onChange={(e) => setPwdVal(e.target.value)} placeholder="min 6 characters" autoFocus />
+            <PasswordInput value={pwdVal} onChange={(e) => setPwdVal(e.target.value)} placeholder="min 6 characters" autoFocus />
           </div>
           <button type="submit" className="btn w-full">Set password</button>
         </form>

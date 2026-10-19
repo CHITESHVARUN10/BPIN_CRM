@@ -4,6 +4,7 @@ import { Loader2, LogIn } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import ThemeToggle from '../components/ThemeToggle.jsx'
+import PasswordInput from '../components/PasswordInput.jsx'
 import logo from '../assets/logo.png'
 
 export default function Login() {
@@ -66,10 +67,8 @@ export default function Login() {
             <label className="label" htmlFor="password">
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
-              className="input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"

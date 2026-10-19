@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import api from '../api/client.js'
 import { EmptyState, SkeletonRows, formatDateTime } from '../components/ui.jsx'
+import PasswordInput from '../components/PasswordInput.jsx'
 
 const MODES = [
   { id: 'db', label: 'Database only', icon: Database, hint: 'Roll MongoDB back to the checkpoint. Media files are not written; missing references are reported.' },
@@ -311,9 +312,7 @@ export default function AdminRecovery() {
           <form onSubmit={onReauth} className="mt-4 space-y-3">
             <div>
               <label className="label">Password</label>
-              <input
-                className="input"
-                type="password"
+              <PasswordInput
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

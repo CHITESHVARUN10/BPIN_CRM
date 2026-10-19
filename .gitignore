@@ -24,6 +24,9 @@ test-artifacts/
 # ── Internal handoff doc (never commit) ──────────────────────────
 HANDOFF.md
 
+# ── Local documentation, test report & screenshots (never commit) ─
+docs/
+
 # ── OS junk ──────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
