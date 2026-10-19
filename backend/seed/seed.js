@@ -96,6 +96,8 @@ async function seedEngineers() {
   return created
 }
 
+// Super-admin rights are NEVER granted or revoked by this seed. They are read
+// only from the `superAdmin` flag already stored in MongoDB.
 async function seedProblems() {
   const names = new Set(CURATED_PROBLEMS.map((n) => n.trim()))
   try {
@@ -114,22 +116,6 @@ async function seedProblems() {
     { ordered: false },
   )
   return names.size
-}
-
-async function seedAdmin() {
-  const email = String(process.env.ADMIN_EMAIL || 'admin@blaupunktcar.in').toLowerCase()
-  const existing = await User.findOne({ email }).lean()
-  if (existing) {
-    const patch = {}
-    if (existing.role !== 'admin') patch.role = 'admin'
-    if (!existing.superAdmin) patch.superAdmin = true
-    if (Object.keys(patch).length) await User.updateOne({ _id: existing._id }, { $set: patch })
-    return existing.email
-  }
-  const admin = new User({ name: 'BPIN Admin', email, role: 'admin', superAdmin: true, active: true })
-  await admin.setPassword(adminPassword())
-  await admin.save()
-  return email
 }
 
 const ADMIN_ACCOUNTS = [
@@ -153,7 +139,7 @@ async function seedStaffAdmins() {
       if (existing.role !== 'admin') patch.role = 'admin'
       if (existing.name !== account.name) patch.name = account.name
       if (existing.phone !== account.phone) patch.phone = account.phone
-      if (existing.superAdmin) patch.superAdmin = false
+      // Never touch superAdmin here — it is managed directly in MongoDB.
       if (Object.keys(patch).length) await User.updateOne({ _id: existing._id }, { $set: patch })
       continue
     }
@@ -171,14 +157,12 @@ async function main() {
     const products = await seedProducts()
     const techsCreated = await seedEngineers()
     const problems = await seedProblems()
-    const admin = await seedAdmin()
     const staffAdminsCreated = await seedStaffAdmins()
     console.log({
       products,
       technicians: { created: techsCreated, total: await count(User, 'technician') },
       admins: { staffCreated: staffAdminsCreated, total: await count(User, 'admin') },
       problems,
-      admin,
     })
     if (adminFallbackUsed) console.log(`ADMIN_PASSWORD was not set — used one-off password for admins: ${fallbackAdminPassword}`)
     if (techFallbackUsed) console.log(`TECH_DEFAULT_PASSWORD was not set — used one-off password for engineers: ${fallbackTechPassword}`)

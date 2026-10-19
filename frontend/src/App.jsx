@@ -5,6 +5,7 @@ import AppShell from './components/AppShell.jsx'
 import logo from './assets/logo.png'
 import Forbidden from './pages/Forbidden.jsx'
 import Page404 from './pages/Page404.jsx'
+import SuperAdminOnly from './pages/SuperAdminOnly.jsx'
 
 const Login = lazy(() => import('./pages/Login.jsx'))
 const TechHome = lazy(() => import('./pages/TechHome.jsx'))
@@ -57,7 +58,7 @@ function RequireAdmin({ children }) {
 
 function RequireSuperAdmin({ children }) {
   const { user } = useAuth()
-  if (user && (user.role !== 'admin' || user.superAdmin !== true)) return <Forbidden />
+  if (user && (user.role !== 'admin' || user.superAdmin !== true)) return <SuperAdminOnly />
   return children
 }
 

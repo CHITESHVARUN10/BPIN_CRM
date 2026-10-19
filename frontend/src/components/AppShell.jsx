@@ -39,7 +39,10 @@ export default function AppShell() {
   const { unread } = useNotifications()
   const navigate = useNavigate()
   const isAdmin = user?.role === 'admin'
-  const adminNav = user?.superAdmin ? [...ADMIN_NAV, { to: '/admin/recovery', label: 'Recovery', icon: ShieldCheck }] : ADMIN_NAV
+  const adminNav =
+    isAdmin && user?.superAdmin === true
+      ? [...ADMIN_NAV, { to: '/admin/recovery', label: 'Recovery', icon: ShieldCheck }]
+      : ADMIN_NAV
   const nav = isAdmin ? adminNav : TECH_NAV
 
   const onLogout = async () => {
