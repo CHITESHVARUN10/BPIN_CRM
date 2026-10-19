@@ -16,6 +16,7 @@
     "express": "^5.0.0",
     "express-rate-limit": "^7.4.0",
     "express-session": "^1.17.3",
+    "googleapis": "^186.0.0",
     "helmet": "^8.0.0",
     "mongoose": "^8.0.0",
     "morgan": "^1.10.0",

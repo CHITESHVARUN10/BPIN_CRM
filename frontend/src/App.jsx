@@ -26,6 +26,7 @@ const AdminAssignments = lazy(() => import('./pages/AdminAssignments.jsx'))
 const AdminProducts = lazy(() => import('./pages/AdminProducts.jsx'))
 const AdminLogs = lazy(() => import('./pages/AdminLogs.jsx'))
 const AdminEditCase = lazy(() => import('./pages/AdminEditCase.jsx'))
+const AdminRecovery = lazy(() => import('./pages/AdminRecovery.jsx'))
 
 function Splash() {
   return (
@@ -51,6 +52,12 @@ function RequireTech({ children }) {
 function RequireAdmin({ children }) {
   const { user } = useAuth()
   if (user && user.role !== 'admin') return <Forbidden />
+  return children
+}
+
+function RequireSuperAdmin({ children }) {
+  const { user } = useAuth()
+  if (user && (user.role !== 'admin' || user.superAdmin !== true)) return <Forbidden />
   return children
 }
 
@@ -194,6 +201,14 @@ export default function App() {
             <RequireAdmin>
               <AdminLogs />
             </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/recovery"
+          element={
+            <RequireSuperAdmin>
+              <AdminRecovery />
+            </RequireSuperAdmin>
           }
         />
       </Route>

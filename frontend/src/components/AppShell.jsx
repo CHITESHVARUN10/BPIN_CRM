@@ -1,5 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
-import { Bell, CalendarDays, ClipboardList, FilePlus2, History, House, LayoutDashboard, MapPin, Package, SquareActivity, UserRound, LogOut, Wrench } from 'lucide-react'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Bell, CalendarDays, ClipboardList, FilePlus2, History, House, LayoutDashboard, MapPin, Package, ShieldCheck, SquareActivity, UserRound, LogOut, Wrench } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNotifications } from '../context/NotificationsContext.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
@@ -37,8 +37,10 @@ const ADMIN_NAV = [
 export default function AppShell() {
   const { user, logout } = useAuth()
   const { unread } = useNotifications()
+  const navigate = useNavigate()
   const isAdmin = user?.role === 'admin'
-  const nav = isAdmin ? ADMIN_NAV : TECH_NAV
+  const adminNav = user?.superAdmin ? [...ADMIN_NAV, { to: '/admin/recovery', label: 'Recovery', icon: ShieldCheck }] : ADMIN_NAV
+  const nav = isAdmin ? adminNav : TECH_NAV
 
   const onLogout = async () => {
     await logout()

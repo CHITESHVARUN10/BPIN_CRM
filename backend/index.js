@@ -24,6 +24,7 @@ import pushRoutes from './routes/push.js'
 import reportRoutes from './routes/reports.js'
 import userRoutes from './routes/users.js'
 import logRoutes from './routes/logs.js'
+import recoveryRoutes from './routes/recovery.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 5000
@@ -95,6 +96,7 @@ async function main() {
   app.use('/api/reports', reportRoutes)
   app.use('/api/users', userRoutes)
   app.use('/api/logs', logRoutes)
+  app.use('/api/recovery', recoveryRoutes)
   app.get('/api/health', async (req, res) => {
     let db = 'up'
     try {

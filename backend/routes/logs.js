@@ -11,6 +11,13 @@ const VALID_ACTIONS = [
   'product_created', 'product_updated',
   'assignment_created', 'assignment_updated',
   'problem_created', 'problem_updated',
+  'recovery_reauth_success', 'recovery_reauth_failed', 'recovery_reauth_rate_limited',
+  'recovery_access_denied', 'recovery_inventory_listed', 'recovery_dry_run',
+  'recovery_restore_requested', 'recovery_snapshot_created', 'recovery_database_restored',
+  'recovery_assets_restored', 'recovery_references_repaired', 'recovery_restore_completed',
+  'recovery_restore_partial_failure', 'recovery_restore_failed', 'recovery_rollback_started',
+  'recovery_rollback_completed', 'recovery_rollback_failed', 'recovery_rollback_manual_requested',
+  'recovery_recovery_locked',
 ]
 
 router.get('/', async (req, res, next) => {
