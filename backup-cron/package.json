@@ -8,7 +8,8 @@
   },
   "scripts": {
     "local": "node scripts/run-local.mjs",
-    "check": "node --check api/start.js && node --check api/work.js && node --check lib/backup.js && node --check lib/drive.js"
+    "check": "node --check api/start.js && node --check api/work.js && node --check api/reminders.js && node --check lib/backup.js && node --check lib/drive.js && node --check lib/reminders.js",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.2",

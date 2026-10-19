@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Clock, MapPin, Phone } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { CheckCircle2, Clock, FileText, MapPin, Phone } from 'lucide-react'
 import api from '../api/client.js'
-import { EmptyState, SkeletonRows, formatDateTime, formatDate } from '../components/ui.jsx'
-import { useToast } from '../context/ToastContext.jsx'
+import { EmptyState, SkeletonRows, formatDate, formatDateTime } from '../components/ui.jsx'
+
+function dateKey(value) {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
 
 export default function Assignments() {
-  const push = useToast().push
   const [items, setItems] = useState(null)
   const [segment, setSegment] = useState('all')
-  const [busyId, setBusyId] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -23,33 +28,27 @@ export default function Assignments() {
     load()
   }, [load])
 
-  const markDone = async (a) => {
-    setBusyId(String(a._id))
-    try {
-      await api.patch(`/assignments/${a._id}/status`, { status: 'done' })
-      push(`Visit to ${a.customerName} marked done`)
-      load()
-    } catch (err) {
-      push(err.response?.data?.message || 'Could not update', 'error')
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  const visible = items?.filter((i) => (segment === 'all' ? true : i.status === segment)) || []
+  const allItems = items || []
+  const pendingCount = allItems.filter((a) => !a.reportFiled).length
+  const filedCount = allItems.length - pendingCount
+  const visible = allItems.filter((a) => {
+    if (segment === 'pending') return !a.reportFiled
+    if (segment === 'filed') return a.reportFiled
+    return true
+  })
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">My assignments</h1>
-        <p className="text-[13px] text-zinc-500 mt-0.5">Handed out by the admin team — customer, address and timing</p>
+        <p className="text-[13px] text-zinc-500 mt-0.5">File the report from here so it is linked to the assigned visit.</p>
       </div>
 
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap gap-1.5">
         {[
-          ['all', 'All'],
-          ['pending', 'Pending'],
-          ['done', 'Done'],
+          ['all', `All (${allItems.length})`],
+          ['pending', `Pending report (${pendingCount})`],
+          ['filed', `Report filed (${filedCount})`],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -65,14 +64,24 @@ export default function Assignments() {
       {items === null ? (
         <SkeletonRows rows={4} className="h-14" />
       ) : visible.length === 0 ? (
-        <EmptyState title={segment === 'pending' ? 'Nothing pending' : 'No assignments'} hint="Assigned visits will appear here with the customer's details." />
+        <EmptyState
+          title={segment === 'pending' ? 'Nothing pending' : segment === 'filed' ? 'No reports filed yet' : 'No assignments'}
+          hint="Assigned visits will appear here with the customer's details."
+        />
       ) : (
         <div className="space-y-2.5">
           {visible.map((a) => (
             <div key={String(a._id)} className="card p-4">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-semibold text-zinc-900">{a.customerName}</p>
-                {a.status === 'done' ? <span className="chip chip-strong">Done</span> : <span className="chip chip-open">Pending</span>}
+                {a.reportFiled ? (
+                  <span className="chip chip-strong inline-flex items-center gap-1"><CheckCircle2 size={11} /> Report filed</span>
+                ) : (
+                  <span className="chip chip-open inline-flex items-center gap-1"><Clock size={11} /> Report pending</span>
+                )}
+                {a.serviceRecord?.tokenNo ? (
+                  <span className="text-[11px] font-mono text-zinc-400">{a.serviceRecord.tokenNo}</span>
+                ) : null}
               </div>
               <a href={`tel:${a.customerPhone}`} className="link-accent mt-1 inline-flex items-center gap-1.5 text-[13px] font-medium">
                 <Phone size={13} />
@@ -90,16 +99,20 @@ export default function Assignments() {
               <div className="divider my-3" />
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[11px] text-zinc-400">By {a.assignedBy?.name || 'Admin'} · {formatDateTime(a.createdAt)}</p>
-                {a.status === 'pending' ? (
-                  <button type="button" className="btn btn-sm" disabled={busyId === String(a._id)} onClick={() => markDone(a)}>
-                    {busyId === String(a._id) ? 'Saving…' : (
-                      <>
-                        <Check size={14} />
-                        Mark done
-                      </>
-                    )}
-                  </button>
-                ) : null}
+                {a.reportFiled && a.serviceRecord?._id ? (
+                  <Link to={`/records/${a.serviceRecord._id}`} className="btn btn-sm btn-outline">
+                    <FileText size={14} />
+                    View report
+                  </Link>
+                ) : (
+                  <Link
+                    to={`/new?assignmentId=${a._id}&visitDate=${dateKey(a.visitDate)}`}
+                    className="btn btn-sm"
+                  >
+                    <FileText size={14} />
+                    File report
+                  </Link>
+                )}
               </div>
             </div>
           ))}

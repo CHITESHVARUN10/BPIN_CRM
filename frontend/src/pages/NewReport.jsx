@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Check, Copy, Plus } from 'lucide-react'
 import api from '../api/client.js'
 import ProductSelect from '../components/ProductSelect.jsx'
@@ -38,13 +38,20 @@ function loadDraft() {
 
 export default function NewReport() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const assignmentId = searchParams.get('assignmentId') || ''
+  const assignmentVisitDate = searchParams.get('visitDate') || ''
   const push = useToast().push
   const { refresh } = useNotifications()
 
   const [problems, setProblems] = useState([])
   const [problemsLoading, setProblemsLoading] = useState(true)
   const draft = useRef(loadDraft())
-  const [form, setForm] = useState(draft.current ? { ...emptyForm, ...draft.current } : emptyForm)
+  const [form, setForm] = useState(() => {
+    const base = draft.current ? { ...emptyForm, ...draft.current } : { ...emptyForm }
+    if (!draft.current && assignmentVisitDate) base.visitDate = assignmentVisitDate
+    return base
+  })
   const [images, setImages] = useState([])
   const [videos, setVideos] = useState([])
   const [errors, setErrors] = useState({})
@@ -106,6 +113,7 @@ export default function NewReport() {
       fd.append('vehicleMake', form.vehicleMake.trim())
       fd.append('vehicleModel', form.vehicleModel.trim())
       if (form.visitDate) fd.append('visitDate', form.visitDate)
+      if (assignmentId) fd.append('assignmentId', assignmentId)
       for (const img of images) fd.append('images', img.file)
       for (const vid of videos) fd.append('videos', vid.file)
 
@@ -170,14 +178,16 @@ export default function NewReport() {
             <Copy size={15} />
             {copied ? 'Copied' : 'Copy token'}
           </button>
-          <button className="btn" onClick={() => navigate('/')}>
-            Back to home
+          <button className="btn" onClick={() => navigate(assignmentId ? '/assignments' : '/')}>
+            {assignmentId ? 'Back to assignments' : 'Back to home'}
           </button>
         </div>
-        <button className="text-[13px] text-zinc-500 hover:text-zinc-800 mt-5 inline-flex items-center gap-1 bg-transparent" onClick={reset}>
-          <Plus size={14} />
-          File another report
-        </button>
+        {!assignmentId ? (
+          <button className="text-[13px] text-zinc-500 hover:text-zinc-800 mt-5 inline-flex items-center gap-1 bg-transparent" onClick={reset}>
+            <Plus size={14} />
+            File another report
+          </button>
+        ) : null}
       </div>
     )
   }

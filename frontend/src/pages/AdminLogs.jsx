@@ -15,6 +15,7 @@ const ACTION_LABELS = {
   product_updated: 'Product updated',
   assignment_created: 'Assignment handed out',
   assignment_updated: 'Assignment updated',
+  assignment_report_missing: 'Assignment report missing',
   problem_created: 'Problem added',
   problem_updated: 'Problem updated',
   backup_started: 'Backup started',

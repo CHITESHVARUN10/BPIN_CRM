@@ -29,6 +29,7 @@ export const ACTIONS = {
   productUpdated: 'product_updated',
   assignmentCreated: 'assignment_created',
   assignmentUpdated: 'assignment_updated',
+  assignmentReportMissing: 'assignment_report_missing',
   problemCreated: 'problem_created',
   problemUpdated: 'problem_updated',
 }

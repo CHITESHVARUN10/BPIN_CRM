@@ -1,6 +1,8 @@
 import { Router } from 'express'
+import mongoose from 'mongoose'
 import multer from 'multer'
 import ServiceRecord from '../models/ServiceRecord.js'
+import Assignment from '../models/Assignment.js'
 import Product from '../models/Product.js'
 import Problem from '../models/Problem.js'
 import User from '../models/User.js'
@@ -88,6 +90,22 @@ router.post('/', requireAuth, uploadMediaFiles, async (req, res, next) => {
       problemSub = { ref: problem._id, name: problem.name, isOther: false }
     }
 
+    let assignment = null
+    const assignmentId = String(body.assignmentId || '').trim()
+    if (assignmentId) {
+      if (!mongoose.isValidObjectId(assignmentId)) {
+        return res.status(400).json({ message: 'Invalid assignment' })
+      }
+      assignment = await Assignment.findById(assignmentId)
+      if (!assignment) return res.status(404).json({ message: 'Assignment not found' })
+      if (String(assignment.assignedTo) !== String(req.user._id)) {
+        return res.status(403).json({ message: 'This assignment is not assigned to you' })
+      }
+      if (assignment.serviceRecord) {
+        return res.status(400).json({ message: 'This assignment already has a service report' })
+      }
+    }
+
     const uploads = await collectMedia(req)
 
     const create = async () => ServiceRecord.create({
@@ -113,6 +131,14 @@ router.post('/', requireAuth, uploadMediaFiles, async (req, res, next) => {
     }
 
     await logAudit(req.user, ACTIONS.caseCreated, { kind: 'record', id: record._id, label: record.tokenNo }, `${product.sku} · ${problemSub.name}`)
+
+    if (assignment) {
+      await Assignment.updateOne(
+        { _id: assignment._id, serviceRecord: null },
+        { $set: { serviceRecord: record._id, status: 'done', doneAt: new Date(), updatedAt: new Date() } },
+      )
+      await logAudit(req.user, ACTIONS.assignmentUpdated, { kind: 'assignment', id: assignment._id, label: `${assignment.customerName} → ${req.user.name}` }, `Report filed: ${record.tokenNo}`)
+    }
 
     return res.status(201).json({ record: { _id: record._id, tokenNo: record.tokenNo, serialNumber: record.serialNumber } })
   } catch (err) {

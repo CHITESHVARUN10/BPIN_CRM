@@ -9,7 +9,7 @@ const VALID_ACTIONS = [
   'user_created', 'user_updated', 'user_password_reset',
   'case_created', 'case_edited', 'case_closed', 'case_reopened',
   'product_created', 'product_updated',
-  'assignment_created', 'assignment_updated',
+  'assignment_created', 'assignment_updated', 'assignment_report_missing',
   'problem_created', 'problem_updated',
   'backup_started', 'backup_completed', 'backup_failed', 'backup_retry', 'backup_retry_manual',
   'backup_rotated', 'backup_attempt_skipped', 'backup_attempt_failed', 'backup_worker_failed',

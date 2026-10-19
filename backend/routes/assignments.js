@@ -18,8 +18,9 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
       .sort({ visitDate: -1, createdAt: -1 })
       .populate('assignedTo', 'name phone email region')
       .populate('assignedBy', 'name')
+      .populate('serviceRecord', 'tokenNo status createdAt')
       .lean()
-    res.json({ items })
+    res.json({ items: items.map((item) => ({ ...item, reportFiled: Boolean(item.serviceRecord) })) })
   } catch (err) {
     next(err)
   }
@@ -32,8 +33,9 @@ router.get('/my', requireAuth, async (req, res, next) => {
     const items = await Assignment.find(filter)
       .sort({ visitDate: -1, createdAt: -1 })
       .populate('assignedBy', 'name')
+      .populate('serviceRecord', 'tokenNo status createdAt')
       .lean()
-    res.json({ items })
+    res.json({ items: items.map((item) => ({ ...item, reportFiled: Boolean(item.serviceRecord) })) })
   } catch (err) {
     next(err)
   }
@@ -93,6 +95,12 @@ router.patch('/:id/status', requireAuth, async (req, res, next) => {
     }
     if (req.body?.status !== 'pending' && req.body?.status !== 'done') {
       return res.status(400).json({ message: 'Status must be pending or done' })
+    }
+    if (req.body.status === 'done' && !assignment.serviceRecord) {
+      return res.status(400).json({ message: 'File a service report before marking this assignment done' })
+    }
+    if (req.body.status === 'pending' && assignment.serviceRecord) {
+      return res.status(400).json({ message: 'This assignment already has a linked service report' })
     }
     assignment.status = req.body.status
     assignment.doneAt = req.body.status === 'done' ? new Date() : null
