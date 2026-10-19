@@ -106,13 +106,21 @@ export async function startRun({ source = 'manual' } = {}) {
   const db = await connect()
   const env = getEnv()
 
-  const active = await db.collection('backup_runs').findOne({
+  try {
+    const active = await db.collection('backup_runs').findOne({
     $or: [{ status: 'running' }, { status: 'failed', retryAttempts: { $lt: MAX_RUN_RETRIES } }],
   })
   if (active) {
+    const reason = active.status === 'running' ? 'a backup is already running' : 'a failed backup is awaiting automatic retry'
+    await audit(db, {
+      action: 'backup_attempt_skipped',
+      targetId: active._id,
+      targetLabel: active.drive?.folderName || 'Backup',
+      detail: `Start attempt skipped: ${reason}`,
+    })
     return {
       started: false,
-      reason: active.status === 'running' ? 'a backup is already running' : 'a failed backup is awaiting automatic retry',
+      reason,
       runId: String(active._id),
     }
   }
@@ -212,6 +220,18 @@ export async function startRun({ source = 'manual' } = {}) {
     collections: APP_COLLECTIONS.length,
     mediaFiles: mediaItems.length,
     mediaBytes,
+  }
+  } catch (err) {
+    try {
+      await audit(db, {
+        action: 'backup_attempt_failed',
+        targetLabel: 'Backup start',
+        detail: `${source} attempt failed: ${err?.message || err}`,
+      })
+    } catch {
+      // logging must never mask the original failure
+    }
+    throw err
   }
 }
 
@@ -555,6 +575,17 @@ export async function runWorker() {
       return { status: outcome, processed }
     }
     return { status: 'running', processed, remaining }
+  } catch (err) {
+    try {
+      await audit(db, {
+        action: 'backup_worker_failed',
+        targetLabel: 'Backup worker',
+        detail: err?.message || String(err),
+      })
+    } catch {
+      // logging must never mask the original failure
+    }
+    throw err
   } finally {
     await releaseLock(db, holder)
   }

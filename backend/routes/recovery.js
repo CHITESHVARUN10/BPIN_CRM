@@ -166,6 +166,50 @@ router.get('/checkpoints', async (req, res, next) => {
   }
 })
 
+router.get('/backup-activity', async (req, res, next) => {
+  try {
+    const database = db()
+    const [runs, events] = await Promise.all([
+      database.collection('backup_runs').find({}).sort({ startedAt: -1 }).limit(10).toArray(),
+      database
+        .collection('auditlogs')
+        .find({ $or: [{ targetKind: 'backup' }, { action: { $regex: '^backup_' } }] })
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .toArray(),
+    ])
+    await recoveryEvent(database, {
+      actor: req.user,
+      action: 'backup_activity_viewed',
+      detail: `${runs.length} backup run(s), ${events.length} backup event(s)`,
+      ...meta(req),
+    })
+    res.json({
+      runs: runs.map((run) => ({
+        id: String(run._id),
+        folder: run.drive?.folderName || null,
+        status: run.status,
+        startedAt: run.startedAt || null,
+        completedAt: run.completedAt || null,
+        rotatedAt: run.rotatedAt || null,
+        retryAttempts: run.retryAttempts || 0,
+        lastError: run.lastError || null,
+        docs: run.totals?.dbDocs || 0,
+        mediaFiles: run.totals?.mediaFiles || 0,
+        mediaBytes: run.totals?.mediaBytes || 0,
+      })),
+      events: events.map((event) => ({
+        at: event.createdAt || null,
+        action: event.action,
+        targetLabel: event.targetLabel || '',
+        detail: event.detail || '',
+      })),
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
 router.post('/dry-run', async (req, res, next) => {
   try {
     if (!ensureConfigured(res)) return

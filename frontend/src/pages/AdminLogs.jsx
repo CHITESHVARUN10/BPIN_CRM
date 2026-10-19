@@ -16,6 +16,15 @@ const ACTION_LABELS = {
   assignment_updated: 'Assignment updated',
   problem_created: 'Problem added',
   problem_updated: 'Problem updated',
+  backup_started: 'Backup started',
+  backup_completed: 'Backup completed',
+  backup_failed: 'Backup failed',
+  backup_retry: 'Backup automatic retry',
+  backup_retry_manual: 'Backup manual retry',
+  backup_rotated: 'Backup generation rotated',
+  backup_attempt_skipped: 'Backup attempt skipped',
+  backup_attempt_failed: 'Backup attempt failed',
+  backup_worker_failed: 'Backup worker error',
   recovery_reauth_success: 'Recovery: re-authenticated',
   recovery_reauth_failed: 'Recovery: failed re-auth',
   recovery_reauth_rate_limited: 'Recovery: rate limited',
@@ -35,6 +44,7 @@ const ACTION_LABELS = {
   recovery_rollback_failed: 'Recovery: rollback failed',
   recovery_rollback_manual_requested: 'Recovery: manual rollback',
   recovery_recovery_locked: 'Recovery: locked',
+  recovery_backup_activity_viewed: 'Recovery: backup activity viewed',
 }
 
 const ROLE_COLORS = {

@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Database,
+  History,
   Images,
   Loader2,
   Lock,
@@ -37,6 +38,25 @@ const STATUS_LABELS = {
   rolled_back: 'Rolled back',
   failed: 'Failed',
   manual_intervention_required: 'Manual intervention required',
+}
+
+const BACKUP_STATUS_LABELS = {
+  completed: 'Completed',
+  running: 'Running',
+  failed: 'Failed',
+  rotated: 'Rotated',
+}
+
+const BACKUP_ACTION_LABELS = {
+  backup_started: 'Backup started',
+  backup_completed: 'Backup completed',
+  backup_failed: 'Backup failed',
+  backup_retry: 'Automatic retry',
+  backup_retry_manual: 'Manual retry',
+  backup_rotated: 'Old generation rotated',
+  backup_attempt_skipped: 'Attempt skipped',
+  backup_attempt_failed: 'Attempt failed',
+  backup_worker_failed: 'Worker error',
 }
 
 const apiError = (err, fallback) => err?.response?.data?.message || err?.message || fallback
@@ -75,6 +95,13 @@ function statusChip(status) {
   return 'chip'
 }
 
+function backupStatusChip(status) {
+  if (status === 'completed') return 'chip chip-strong'
+  if (status === 'running') return 'chip chip-open'
+  if (status === 'failed') return 'chip !bg-red-50 !text-red-700'
+  return 'chip'
+}
+
 export default function AdminRecovery() {
   const [session, setSession] = useState(null)
   const [password, setPassword] = useState('')
@@ -101,6 +128,9 @@ export default function AdminRecovery() {
   const [operation, setOperation] = useState(null)
   const [operations, setOperations] = useState([])
   const [rollbackBusy, setRollbackBusy] = useState(false)
+  const [activity, setActivity] = useState(null)
+  const [activityBusy, setActivityBusy] = useState(false)
+  const [activityError, setActivityError] = useState('')
   const pollRef = useRef(null)
 
   const selected = useMemo(() => (checkpoints || []).find((c) => c.id === selectedId) || null, [checkpoints, selectedId])
@@ -149,6 +179,21 @@ export default function AdminRecovery() {
     }
   }, [])
 
+  const loadBackupActivity = useCallback(async () => {
+    setActivityBusy(true)
+    setActivityError('')
+    try {
+      const { data } = await api.get('/recovery/backup-activity')
+      setActivity({ runs: data.runs || [], events: data.events || [] })
+    } catch (err) {
+      setActivity({ runs: [], events: [] })
+      setActivityError(apiError(err, 'Could not load backup activity'))
+      handleApiError(err)
+    } finally {
+      setActivityBusy(false)
+    }
+  }, [handleApiError])
+
   useEffect(() => {
     let alive = true
     ;(async () => {
@@ -157,12 +202,13 @@ export default function AdminRecovery() {
       if (state.authenticated) {
         loadInventory()
         loadOperations()
+        loadBackupActivity()
       }
     })()
     return () => {
       alive = false
     }
-  }, [loadSession, loadInventory, loadOperations])
+  }, [loadSession, loadInventory, loadOperations, loadBackupActivity])
 
   useEffect(() => {
     setPlan(null)
@@ -203,6 +249,7 @@ export default function AdminRecovery() {
       setSession(data)
       await loadInventory()
       await loadOperations()
+      await loadBackupActivity()
     } catch (err) {
       setReauthError(apiError(err, 'Re-authentication failed'))
     } finally {
@@ -379,6 +426,111 @@ export default function AdminRecovery() {
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+                  <History size={15} />
+                  Backup activity
+                </h2>
+                <p className="text-[12.5px] text-zinc-500 mt-0.5">
+                  Every cron attempt, result and rotation recorded in MongoDB. Visible only to the super admin.
+                </p>
+              </div>
+              <button className="btn btn-sm btn-outline" onClick={loadBackupActivity} disabled={activityBusy}>
+                {activityBusy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                Refresh
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-4">
+              {activityBusy && !activity ? (
+                <SkeletonRows rows={3} className="h-12" />
+              ) : activityError ? (
+                <p className="text-[13px] text-red-600">{activityError}</p>
+              ) : !activity || (!activity.runs.length && !activity.events.length) ? (
+                <EmptyState
+                  icon={History}
+                  title="No backup activity yet"
+                  hint="Start attempts and results from the backup cron will appear here."
+                />
+              ) : (
+                <>
+                  {activity.runs.length ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[12px] min-w-[620px]">
+                        <thead>
+                          <tr className="text-left text-[10.5px] uppercase tracking-wider text-zinc-400 border-b border-zinc-200">
+                            <th className="py-1.5 pr-3 font-medium">Backup</th>
+                            <th className="py-1.5 pr-3 font-medium">Status</th>
+                            <th className="py-1.5 pr-3 font-medium">Started</th>
+                            <th className="py-1.5 pr-3 font-medium">Finished</th>
+                            <th className="py-1.5 font-medium">Content</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activity.runs.map((run) => (
+                            <tr key={run.id} className="border-t border-zinc-100 align-top">
+                              <td className="py-1.5 pr-3">
+                                <span className="font-medium text-zinc-800">{run.folder || '—'}</span>
+                                {run.lastError ? <p className="text-[11px] text-red-600 break-words mt-0.5">{run.lastError}</p> : null}
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                <span className={backupStatusChip(run.status)}>
+                                  {BACKUP_STATUS_LABELS[run.status] || run.status}
+                                </span>
+                                {run.retryAttempts ? (
+                                  <span className="block text-[10.5px] text-zinc-400 mt-0.5">retry {run.retryAttempts}</span>
+                                ) : null}
+                              </td>
+                              <td className="py-1.5 pr-3 text-zinc-500 whitespace-nowrap">
+                                {run.startedAt ? formatDateTime(run.startedAt) : '—'}
+                              </td>
+                              <td className="py-1.5 pr-3 text-zinc-500 whitespace-nowrap">
+                                {run.completedAt ? formatDateTime(run.completedAt) : '—'}
+                              </td>
+                              <td className="py-1.5 text-zinc-500 whitespace-nowrap">
+                                {run.docs} docs · {run.mediaFiles} media ({bytes(run.mediaBytes)})
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+
+                  {activity.events.length ? (
+                    <div>
+                      <p className="text-[10.5px] font-semibold uppercase tracking-wider text-zinc-400">
+                        Recent attempts and results
+                      </p>
+                      <div className="mt-1.5 max-h-56 overflow-y-auto space-y-1.5">
+                        {activity.events.map((event, index) => (
+                          <div key={`${event.at || 'event'}-${index}`} className="rounded-lg bg-zinc-50 px-2.5 py-1.5">
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                              <span className="text-[10.5px] text-zinc-400 tabular-nums">
+                                {event.at ? formatDateTime(event.at) : '—'}
+                              </span>
+                              <span className="text-[12px] font-medium text-zinc-800">
+                                {BACKUP_ACTION_LABELS[event.action] || event.action}
+                              </span>
+                              {event.targetLabel ? (
+                                <span className="text-[10.5px] text-zinc-400">{event.targetLabel}</span>
+                              ) : null}
+                            </div>
+                            {event.detail ? (
+                              <p className="mt-0.5 text-[11.5px] text-zinc-500 break-words">{event.detail}</p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               )}
             </div>
           </div>

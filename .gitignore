@@ -23,6 +23,7 @@ test-artifacts/
 
 # ── Internal handoff doc (never commit) ──────────────────────────
 HANDOFF.md
+HOSTING.md
 
 # ── Local documentation, test report & screenshots (never commit) ─
 docs/

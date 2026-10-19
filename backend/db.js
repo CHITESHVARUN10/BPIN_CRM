@@ -3,8 +3,6 @@ import mongoose from 'mongoose'
 export function mongoUri() {
   return (
     process.env.MONGODB_URI_NEW ||
-    process.env.mongo_uri_txt ||
-    process.env.MONGO_URI_DEPLOY ||
     process.env.DB_URL ||
     'mongodb://127.0.0.1:27017/bpin'
   )
@@ -12,9 +10,7 @@ export function mongoUri() {
 
 export function mongoUriSource() {
   if (process.env.MONGODB_URI_NEW) return 'MONGODB_URI_NEW (company Atlas)'
-  if (process.env.mongo_uri_txt) return 'mongo_uri_txt (legacy Atlas)'
-  if (process.env.MONGO_URI_DEPLOY) return 'MONGO_URI_DEPLOY (legacy Atlas)'
-  if (process.env.DB_URL) return 'DB_URL'
+  if (process.env.DB_URL) return 'DB_URL (local development)'
   return 'local default'
 }
 
