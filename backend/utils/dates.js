@@ -14,9 +14,22 @@ export function startOfMonth(d = new Date()) {
   return new Date(d.getFullYear(), d.getMonth(), 1)
 }
 
+function badDate(label) {
+  const err = new Error(`Invalid ${label} date`)
+  err.status = 400
+  return err
+}
+
+export function parseDateInput(value, label = 'date') {
+  if (value === undefined || value === null || value === '') return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) throw badDate(label)
+  return date
+}
+
 export function parseBounds(fromStr, toStr) {
-  const from = fromStr ? startOfDay(new Date(fromStr)) : null
-  const to = toStr ? endOfDay(new Date(toStr)) : null
+  const from = fromStr ? startOfDay(parseDateInput(fromStr, 'from')) : null
+  const to = toStr ? endOfDay(parseDateInput(toStr, 'to')) : null
   return { from, to }
 }
 

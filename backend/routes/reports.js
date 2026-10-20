@@ -2,7 +2,7 @@ import { Router } from 'express'
 import User from '../models/User.js'
 import ServiceRecord from '../models/ServiceRecord.js'
 import { requireAuth, requireAdmin } from '../middleware/auth.js'
-import { parseBounds, startOfDay, subDaysToStart } from '../utils/dates.js'
+import { parseBounds, parseDateInput, startOfDay, subDaysToStart } from '../utils/dates.js'
 import { buildRecordCsv, buildRecordPdf } from '../utils/exporters.js'
 
 const router = Router()
@@ -10,7 +10,7 @@ router.use(requireAuth, requireAdmin)
 
 router.get('/activity', async (req, res, next) => {
   try {
-    const date = req.query.date ? new Date(req.query.date) : new Date()
+    const date = parseDateInput(req.query.date, 'activity') || new Date()
     const dayStart = startOfDay(date)
     const match = { visitDate: { $gte: dayStart, $lte: new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1) } }
     const grouped = await ServiceRecord.aggregate([
@@ -95,18 +95,19 @@ router.get('/summary', async (req, res, next) => {
   }
 })
 
-function parseExports(req) {
+function parseExportQuery(req) {
   const { from, to } = parseBounds(req.query.from, req.query.to)
   const match = {}
   if (from && to) match.visitDate = { $gte: from, $lte: to }
   else if (from) match.visitDate = { $gte: from }
   else if (to) match.visitDate = { $lte: to }
-  return match
+  return { match, from, to }
 }
 
 router.get('/export.csv', async (req, res, next) => {
   try {
-    const records = await ServiceRecord.find(parseExports(req)).sort('visitDate').populate('technician', 'name region').limit(5000).lean()
+    const { match } = parseExportQuery(req)
+    const records = await ServiceRecord.find(match).sort('visitDate').populate('technician', 'name region').limit(5000).lean()
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
     res.setHeader('Content-Disposition', 'attachment; filename="bpin-service-report.csv"')
     res.send(buildRecordCsv(records))
@@ -117,9 +118,8 @@ router.get('/export.csv', async (req, res, next) => {
 
 router.get('/export.pdf', async (req, res, next) => {
   try {
-    const p = parseExports(req)
-    const { from, to } = p
-    const records = await ServiceRecord.find(p).sort('visitDate').populate('technician', 'name region').limit(500).lean()
+    const { match, from, to } = parseExportQuery(req)
+    const records = await ServiceRecord.find(match).sort('visitDate').populate('technician', 'name region').limit(500).lean()
     await buildRecordPdf(records, { from, to }, res)
   } catch (err) {
     next(err)

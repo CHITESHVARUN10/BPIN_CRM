@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import Product from '../models/Product.js'
 import { requireAuth, requireAdmin } from '../middleware/auth.js'
-import { escapeRx } from '../utils/common.js'
+import { escapeRx, isObjectId } from '../utils/common.js'
 import { logAudit, ACTIONS } from '../utils/log.js'
 
 const router = Router()
@@ -41,6 +41,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
 
 router.patch('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Product not found' })
     const product = await Product.findById(req.params.id)
     if (!product) return res.status(404).json({ message: 'Product not found' })
 

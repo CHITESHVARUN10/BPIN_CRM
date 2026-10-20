@@ -2,6 +2,7 @@ import { Router } from 'express'
 import User from '../models/User.js'
 import { requireAuth, requireAdmin, safeUser } from '../middleware/auth.js'
 import { logAudit, ACTIONS } from '../utils/log.js'
+import { isObjectId } from '../utils/common.js'
 
 const router = Router()
 router.use(requireAuth, requireAdmin)
@@ -50,6 +51,7 @@ router.post('/', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'User not found' })
     const user = await User.findById(req.params.id)
     if (!user) return res.status(404).json({ message: 'User not found' })
 

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import Problem from '../models/Problem.js'
 import { requireAuth, requireAdmin } from '../middleware/auth.js'
 import { logAudit, ACTIONS } from '../utils/log.js'
+import { isObjectId } from '../utils/common.js'
 
 const router = Router()
 
@@ -31,6 +32,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
 
 router.patch('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Problem not found' })
     const update = {}
     if (typeof req.body?.name === 'string') update.name = req.body.name.trim()
     if (typeof req.body?.archived === 'boolean') update.archived = req.body.archived

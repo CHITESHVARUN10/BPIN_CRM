@@ -7,8 +7,8 @@ import Problem from '../models/Problem.js'
 import User from '../models/User.js'
 import { requireAuth, requireAdmin } from '../middleware/auth.js'
 import { nextToken } from '../utils/token.js'
-import { escapeRx } from '../utils/common.js'
-import { startOfDay, startOfMonth, parseBounds } from '../utils/dates.js'
+import { escapeRx, isObjectId } from '../utils/common.js'
+import { startOfDay, startOfMonth, parseBounds, parseDateInput } from '../utils/dates.js'
 import { resolveUploadedMedia } from '../utils/blob.js'
 import { logAudit, ACTIONS } from '../utils/log.js'
 import Notification from '../models/Notification.js'
@@ -66,6 +66,7 @@ router.post('/', requireAuth, async (req, res, next) => {
       if (!otherDesc) return res.status(400).json({ message: 'Description is required for other problems' })
       problemSub = { ref: null, name: title, isOther: true, otherDescription: otherDesc }
     } else {
+      if (!isObjectId(body.problemId)) return res.status(400).json({ message: 'Select a problem from the list' })
       const problem = await Problem.findOne({ _id: body.problemId, archived: false }).lean()
       if (!problem) return res.status(400).json({ message: 'Select a problem from the list' })
       problemSub = { ref: problem._id, name: problem.name, isOther: false }
@@ -90,6 +91,7 @@ router.post('/', requireAuth, async (req, res, next) => {
     const images = await resolveUploadedMedia(body.images, { userId, kind: 'image', maxCount: 4 })
     const videos = await resolveUploadedMedia(body.videos, { userId, kind: 'video', maxCount: 1 })
     const uploads = [...images, ...videos]
+    const visitDate = parseDateInput(body.visitDate, 'visit')
 
     const create = async () => ServiceRecord.create({
       tokenNo: await nextToken(),
@@ -103,7 +105,7 @@ router.post('/', requireAuth, async (req, res, next) => {
       notes: String(body.notes || '').trim(),
       vehicle: { make: String(body.vehicleMake || '').trim(), model: String(body.vehicleModel || '').trim() },
       images: uploads,
-      visitDate: body.visitDate ? new Date(body.visitDate) : undefined,
+      visitDate: visitDate || undefined,
     })
 
     let record
@@ -136,6 +138,7 @@ router.post('/', requireAuth, async (req, res, next) => {
 
 router.post('/:id/close', requireAuth, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Record not found' })
     const record = await ServiceRecord.findById(req.params.id)
     if (!record) return res.status(404).json({ message: 'Record not found' })
     if (String(record.technician) !== String(req.user._id) && req.user.role !== 'admin') {
@@ -180,6 +183,7 @@ router.post('/:id/close', requireAuth, async (req, res, next) => {
 
 router.patch('/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Record not found' })
     const record = await ServiceRecord.findById(req.params.id)
     if (!record) return res.status(404).json({ message: 'Record not found' })
     if (record.status === 'closed') {
@@ -220,6 +224,7 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res, next) => {
         if (!title || !otherDesc) return res.status(400).json({ message: 'Other problems need both a name and a description' })
         problemSub = { ref: null, name: title, isOther: true, otherDescription: otherDesc }
       } else {
+        if (!isObjectId(body.problemId)) return res.status(400).json({ message: 'Select a problem from the list' })
         const problem = await Problem.findOne({ _id: body.problemId, archived: false }).lean()
         if (!problem) return res.status(400).json({ message: 'Select a problem from the list' })
         problemSub = { ref: problem._id, name: problem.name, isOther: false }
@@ -242,6 +247,7 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res, next) => {
 
 router.post('/:id/reopen', requireAuth, requireAdmin, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Record not found' })
     const record = await ServiceRecord.findById(req.params.id).populate('technician', 'name')
     if (!record) return res.status(404).json({ message: 'Record not found' })
     if (record.status === 'open') return res.status(400).json({ message: 'This case is already open' })
@@ -267,7 +273,10 @@ router.get('/my', requireAuth, async (req, res, next) => {
     const page = Math.max(1, parseInt(req.query.page) || 1)
     const filter = {}
     if (req.user.role === 'admin') {
-      if (req.query.technician) filter.technician = req.query.technician
+      if (req.query.technician) {
+        if (!isObjectId(req.query.technician)) return res.status(400).json({ message: 'Invalid technician' })
+        filter.technician = req.query.technician
+      }
     } else {
       filter.technician = req.user._id
     }
@@ -282,7 +291,10 @@ router.get('/my', requireAuth, async (req, res, next) => {
     else if (from) filter.visitDate = { $gte: from }
     else if (to) filter.visitDate = { $lte: to }
 
-    if (req.query.problem) filter['problem.ref'] = req.query.problem
+    if (req.query.problem) {
+      if (!isObjectId(req.query.problem)) return res.status(400).json({ message: 'Invalid problem' })
+      filter['problem.ref'] = req.query.problem
+    }
     if (req.query.sku) filter['productSnapshot.sku'] = String(req.query.sku)
     if (req.query.status === 'open' || req.query.status === 'closed') filter.status = req.query.status
 
@@ -317,6 +329,7 @@ router.get('/my-stats', requireAuth, async (req, res, next) => {
 
 router.get('/:id', requireAuth, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Record not found' })
     const record = await ServiceRecord.findById(req.params.id)
       .populate('technician', 'name email phone region')
       .populate('product', 'sku description category')
@@ -334,6 +347,7 @@ router.get('/:id', requireAuth, async (req, res, next) => {
 
 router.post('/:id/follow-up', requireAuth, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Record not found' })
     const record = await ServiceRecord.findById(req.params.id)
     if (!record) return res.status(404).json({ message: 'Record not found' })
     if (String(record.technician) !== String(req.user._id) && req.user.role !== 'admin') {
@@ -364,6 +378,7 @@ router.post('/:id/follow-up', requireAuth, async (req, res, next) => {
       if (!otherDesc) return res.status(400).json({ message: 'Description is required for other problems' })
       problemSub = { ref: null, name: title, isOther: true, otherDescription: otherDesc }
     } else {
+      if (!isObjectId(body.problemId)) return res.status(400).json({ message: 'Select a problem from the list' })
       const problem = await Problem.findOne({ _id: body.problemId, archived: false }).lean()
       if (!problem) return res.status(400).json({ message: 'Select a problem from the list' })
       problemSub = { ref: problem._id, name: problem.name, isOther: false }

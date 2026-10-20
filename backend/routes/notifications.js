@@ -4,7 +4,8 @@ import User from '../models/User.js'
 import ServiceRecord from '../models/ServiceRecord.js'
 import { requireAuth, requireAdmin } from '../middleware/auth.js'
 import { sendToUser } from '../utils/push.js'
-import { formatDateLabel, startOfDay, endOfDay } from '../utils/dates.js'
+import { formatDateLabel, parseDateInput, startOfDay, endOfDay } from '../utils/dates.js'
+import { isObjectId } from '../utils/common.js'
 
 const router = Router()
 
@@ -23,6 +24,7 @@ router.get('/my', requireAuth, async (req, res, next) => {
 
 router.patch('/:id/read', requireAuth, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Notification not found' })
     const item = await Notification.findOne({ _id: req.params.id, recipient: req.user._id })
     if (!item) return res.status(404).json({ message: 'Notification not found' })
     if (!item.readAt) {
@@ -37,13 +39,14 @@ router.patch('/:id/read', requireAuth, async (req, res, next) => {
 
 router.post('/remind', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const date = req.body?.date ? new Date(req.body.date) : new Date()
+    const date = parseDateInput(req.body?.date, 'reminder') || new Date()
     const from = startOfDay(date)
     const to = endOfDay(date)
 
     let users = []
     const userIds = Array.isArray(req.body?.userIds) ? req.body.userIds : null
     if (userIds?.length) {
+      if (userIds.some((id) => !isObjectId(id))) return res.status(400).json({ message: 'Invalid technician' })
       users = await User.find({ _id: { $in: userIds }, role: 'technician', active: true }).lean()
     } else {
       const activeToday = await ServiceRecord.distinct('technician', { visitDate: { $gte: from, $lte: to } })

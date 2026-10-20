@@ -10,6 +10,7 @@ const SHA_RX = /^[a-f0-9]{64}$/
 
 export async function listCheckpoints() {
   const drive = await getDrive()
+  drive.clearCache?.()
   const rootId = await drive.ensureRootFolder()
   const children = await drive.listChildren(rootId)
   const folders = children.filter((c) => c.mimeType === DRIVE_FOLDER_MIME && FOLDER_RX.test(c.name))
@@ -21,6 +22,7 @@ export async function listCheckpoints() {
 
 export async function loadCheckpoint(checkpointId) {
   const drive = await getDrive()
+  drive.clearCache?.()
   const rootId = await drive.ensureRootFolder()
   const children = await drive.listChildren(rootId)
   const folder = children.find((c) => c.id === checkpointId && c.mimeType === DRIVE_FOLDER_MIME && FOLDER_RX.test(c.name))

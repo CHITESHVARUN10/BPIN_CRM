@@ -119,7 +119,7 @@ export default function AdminAssignments() {
               <label className="label">Technician<span className="text-red-600 ml-0.5">*</span></label>
               <select className="input" value={form.assignedTo} onChange={(e) => set('assignedTo', e.target.value)}>
                 <option value="">Select technician</option>
-                {techs.map((t) => (
+                {techs.filter((t) => t.active !== false).map((t) => (
                   <option key={t._id} value={t._id}>{t.name}{t.region ? ` (${t.region})` : ''}</option>
                 ))}
               </select>

@@ -139,6 +139,10 @@ class GoogleDrive {
     return out
   }
 
+  clearCache() {
+    this.cache.clear()
+  }
+
   async findInFolderByName(parentId, name) {
     const children = await this.listChildren(parentId)
     return children.find((c) => c.name === name) || null
@@ -263,6 +267,10 @@ class LocalDrive {
     }
     this.cache.set(parentId, out)
     return out
+  }
+
+  clearCache() {
+    this.cache.clear()
   }
 
   async findInFolderByName(parentId, name) {

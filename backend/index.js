@@ -124,7 +124,8 @@ async function main() {
       },
     }))
     app.use((req, res, next) => {
-      if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      if ((req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api')) {
+        res.setHeader('Cache-Control', 'no-cache')
         return res.sendFile(path.join(dist, 'index.html'))
       }
       return next()
@@ -132,7 +133,7 @@ async function main() {
   }
 
   app.use((err, req, res, next) => {
-    const status = err.status || (err.code === 11000 ? 409 : err.name === 'MulterError' ? 400 : 500)
+    const status = err.status || (err.code === 11000 ? 409 : err.name === 'CastError' || err.name === 'ValidationError' ? 400 : err.name === 'MulterError' ? 400 : 500)
     if (status >= 500) console.error(err)
     res.status(status).json({ message: err.message || 'Internal server error' })
   })

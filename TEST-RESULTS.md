@@ -3,6 +3,44 @@
 Tested: 2026-10-17 · via agent-browser (headless Chrome, two parallel sessions: super admin + test technician) + API spot-checks.
 Scope: everything the admin asked to verify — admin creates user, assignment hand-out, technician assessment with photo upload, record visibility from both roles, admin filters/reports, close → reopen → close loop, notifications, CSV/PDF exports, logs, products CRUD, dialogs/skeletons, forbidden/404 pages, dark mode.
 
+## Deployment-readiness re-test — 2026-10-20
+
+This pass re-tested the direct browser→Blob upload build and every deployment-critical path.
+
+| Area | Result | Evidence |
+|---|---|---|
+| Backend API routes | **PASS** | 37/37 route scenarios: auth, users/permissions, products, problems, assignments, records, media token/config/delete, file streaming/ETag, notifications, push subscription, reports/activity/summary/CSV/PDF, logs, health, 404s |
+| Backend test suite | **PASS** | 34/34 tests (assignments, media ownership, users permissions, recovery, date/ObjectId validation) |
+| Cron tests + config | **PASS** | 3/3 reminder tests; Vercel config validates; all three cron handlers enforce `CRON_SECRET` |
+| Frontend build/lint | **PASS** | Vite build clean; changed-file lint 0 warnings/0 errors (6 pre-existing repo warnings remain) |
+| Browser E2E | **PASS** | Super admin, staff admin, technician sessions; all pages/routes; forbidden/404; dark/light; QR fallback; logout; invalid login; password change |
+| Direct media | **PASS** | Photo + 6 MB video uploaded browser→Blob; `head()` verified; media streamed back with ETag/304; draft survived reload |
+| Failure/retry | **PASS** | Backend stopped during save → explicit retry panel + draft/media preserved → retry succeeded idempotently |
+| Backup pipeline | **PASS** | Real Blob + local Drive mirror: started/worked/completed; 8 collections + media; checksums; rotation deleted old run; `BACKUPS.json` written |
+| Recovery pipeline | **PASS** | Generated checkpoint dry-run + full `both` restore into scratch Mongo with local Blob mirror; indexes/references/assets verified |
+| Cron cleanup | **PASS** | Orphan staged files deleted after TTL; referenced media retained; reminder handler auth 401/200 verified |
+| Seed script | **PASS** | Fresh DB seeded 1,177 products, 13 engineers, 7 admins, 31 problems; second run created no duplicates |
+| Dependency audit | **PASS** | `npm audit --omit=dev --audit-level=high` clean in backend, frontend, backup-cron |
+
+### Defects found and fixed in this pass
+| # | Defect | Fix |
+|---|---|---|
+| D1 | Deep-link HTML responses used `Cache-Control: public, max-age=0` instead of `no-cache`; SPA HEAD requests 404'd | Set `no-cache` on SPA fallback; support GET/HEAD |
+| D2 | Invalid ObjectIds on assignment/notification/product/problem/user/record routes returned 500 CastErrors | Explicit ID validation (400/404) + generic CastError/ValidationError → 400 boundary |
+| D3 | Invalid report/activity/reminder dates returned 500 | Validated date parser; invalid dates now 400 |
+| D4 | Any signed-in technician could read another technician's media by pathname | `/api/files` now requires own upload prefix or a record owned by that technician (admins can read all) |
+| D5 | Recovery inventory cached the Drive root, hiding new checkpoints and showing rotated/deleted ones | Drive cache invalidation on checkpoint list/load |
+| D6 | Inactive engineers appeared in the assignment creation dropdown | Create dropdown filters inactive engineers (filter dropdown still shows them for history) |
+| D7 | PDF export discarded `from`/`to` range metadata | Export query now passes the actual range to the PDF builder |
+| D8 | `xlsx` was a production dependency although only the local seed script uses it | Moved to `devDependencies`; production audit now clean |
+
+### Deployment notes
+- Backend remains the Render web service; frontend remains Vercel with the `/api/*` rewrite. Direct browser→Blob uploads bypass Vercel's 4.5 MB rewrite/function body limit.
+- Required production env: `MONGODB_URI_NEW`, `SESSION_SECRET`, `BLOB_READ_WRITE_TOKEN`, Google service-account/Shared Drive keys for recovery, and optional VAPID keys for Web Push.
+- Google Drive was exercised through the supported local mirror; live Shared Drive credentials were not used in this test. Web Push delivery and QR camera capture still require HTTPS and a real device/browser permission — APIs/fallbacks were verified.
+- The frontend rewrite destination in `frontend/vercel.json` must match the deployed Render service URL.
+
+
 ## UI walkthrough results
 
 | # | Test | Result | Notes |

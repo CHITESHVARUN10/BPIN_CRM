@@ -6,6 +6,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js'
 import { sendToUser } from '../utils/push.js'
 import { formatDateLabel } from '../utils/dates.js'
 import { logAudit, ACTIONS } from '../utils/log.js'
+import { isObjectId } from '../utils/common.js'
 
 const router = Router()
 
@@ -13,7 +14,10 @@ router.get('/', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const filter = {}
     if (req.query.status === 'pending' || req.query.status === 'done') filter.status = req.query.status
-    if (req.query.technician) filter.assignedTo = req.query.technician
+    if (req.query.technician) {
+      if (!isObjectId(req.query.technician)) return res.status(400).json({ message: 'Invalid technician' })
+      filter.assignedTo = req.query.technician
+    }
     const items = await Assignment.find(filter)
       .sort({ visitDate: -1, createdAt: -1 })
       .populate('assignedTo', 'name phone email region')
@@ -44,6 +48,7 @@ router.get('/my', requireAuth, async (req, res, next) => {
 router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const body = req.body || {}
+    if (!isObjectId(body.assignedTo)) return res.status(400).json({ message: 'Select a valid, active technician' })
     const engineer = await User.findOne({ _id: body.assignedTo, role: 'technician', active: true }).select('name').lean()
     if (!engineer) return res.status(400).json({ message: 'Select a valid, active technician' })
     const customerName = String(body.customerName || '').trim()
@@ -87,6 +92,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res, next) => {
 
 router.patch('/:id/status', requireAuth, async (req, res, next) => {
   try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Assignment not found' })
     const assignment = await Assignment.findById(req.params.id)
     if (!assignment) return res.status(404).json({ message: 'Assignment not found' })
     const isOwnerEngineer = String(assignment.assignedTo) === String(req.user._id)
