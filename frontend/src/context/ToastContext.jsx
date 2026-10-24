@@ -8,7 +8,10 @@ export function ToastProvider({ children }) {
 
   const push = useCallback((message, type = 'success') => {
     const id = ++idRef.current
-    setToasts((prev) => [...prev, { id, message, type }])
+    setToasts((prev) => {
+      const withoutDuplicate = prev.filter((t) => t.message !== message || t.type !== type)
+      return [...withoutDuplicate, { id, message, type }].slice(-3)
+    })
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id))
     }, 3000)

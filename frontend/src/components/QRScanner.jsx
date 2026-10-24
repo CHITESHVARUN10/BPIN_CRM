@@ -4,8 +4,11 @@ import { CameraOff, X } from 'lucide-react'
 
 export default function QRScanner({ onResult, onClose }) {
   const [error, setError] = useState(null)
-  const scannerRef = useRef(null)
-  const stoppedRef = useRef(false)
+  const onResultRef = useRef(onResult)
+
+  useEffect(() => {
+    onResultRef.current = onResult
+  }, [onResult])
 
   useEffect(() => {
     // Browsers only expose getUserMedia on HTTPS or localhost — fail fast with a clear message.
@@ -15,58 +18,70 @@ export default function QRScanner({ onResult, onClose }) {
     }
 
     const scanner = new Html5Qrcode('qr-scan-box')
-    scannerRef.current = scanner
     let timer = null
+    let stopped = false
+    let handled = false
 
-    const stop = () => {
-      if (stoppedRef.current) return
-      stoppedRef.current = true
-      clearTimeout(timer)
+    const stopCamera = () => {
+      try {
+        scanner.pause(true)
+      } catch {
+        // Scanner may not have reached the scanning state yet.
+      }
       try {
         scanner
           .stop()
           .then(() => scanner.clear())
           .catch(() => {})
       } catch {
-        // scanner already stopped (e.g. StrictMode double-mount)
+        // Scanner already stopped.
       }
     }
 
-    startScanner()
-
-    function startScanner() {
-      scanner
-        .start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 240, height: 240 } },
-          (text) => {
-            stop()
-            onResult(text.trim())
-          },
-          () => {},
-        )
-        .catch((err) => {
-          if (stoppedRef.current) return
-          const name = String(err?.name || err || '')
-          if (name.includes('NotAllowed') || name.includes('Permission')) {
-            setError('Camera permission was denied. Allow camera access, or enter the serial number manually.')
-          } else if (name.includes('NotFound') || name.includes('Devices')) {
-            setError('No camera available on this device. Enter the serial number manually.')
-          } else {
-            setError("Couldn't open the camera. Enter the serial number manually.")
-          }
-        })
+    const stop = () => {
+      if (stopped) return
+      stopped = true
+      clearTimeout(timer)
+      stopCamera()
     }
 
+    scanner
+      .start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        (text) => {
+          if (stopped || handled) return
+          handled = true
+          stop()
+          onResultRef.current?.(text.trim())
+        },
+        () => {},
+      )
+      .then(() => {
+        // StrictMode can unmount while camera startup is still pending.
+        if (stopped) stopCamera()
+      })
+      .catch((err) => {
+        if (stopped) return
+        const name = String(err?.name || err || '')
+        if (name.includes('NotAllowed') || name.includes('Permission')) {
+          setError('Camera permission was denied. Allow camera access, or enter the serial number manually.')
+        } else if (name.includes('NotFound') || name.includes('Devices')) {
+          setError('No camera available on this device. Enter the serial number manually.')
+        } else {
+          setError("Couldn't open the camera. Enter the serial number manually.")
+        }
+      })
+
     timer = setTimeout(() => {
-      if (!stoppedRef.current) {
+      if (!stopped && !handled) {
         stop()
         setError("Couldn't scan. Point steadily at the QR code, or enter it manually.")
       }
     }, 20000)
 
     return () => stop()
-  }, [onResult])
+  }, [])
 
   return (
     <div className="fixed inset-0 z-[80] bg-zinc-950/95 flex flex-col">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, Check, Copy, Plus, RotateCcw } from 'lucide-react'
 import api from '../api/client.js'
@@ -74,6 +74,7 @@ export default function NewReport() {
   const [result, setResult] = useState(null)
   const [copied, setCopied] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const lastScanRef = useRef({ text: '', at: 0 })
 
   useEffect(() => {
     api
@@ -117,6 +118,20 @@ export default function NewReport() {
   }, [form, images, videos, draftKey])
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }))
+
+  const handleScanResult = useCallback(
+    (text) => {
+      const serial = String(text || '').trim()
+      if (!serial) return
+      const now = Date.now()
+      if (lastScanRef.current.text === serial && now - lastScanRef.current.at < 1500) return
+      lastScanRef.current = { text: serial, at: now }
+      setForm((current) => ({ ...current, serialNumber: serial }))
+      setScanning(false)
+      push('Serial scanned')
+    },
+    [push],
+  )
 
   const validate = () => {
     const errs = {}
@@ -403,11 +418,7 @@ export default function NewReport() {
 
       {scanning && (
         <QRScanner
-          onResult={(text) => {
-            set('serialNumber', text)
-            setScanning(false)
-            push('Serial scanned')
-          }}
+          onResult={handleScanResult}
           onClose={() => setScanning(false)}
         />
       )}
