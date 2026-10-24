@@ -123,11 +123,12 @@ export default function NewReport() {
     (text) => {
       const serial = String(text || '').trim()
       if (!serial) return
+      // A valid scan always closes the camera, even when its toast is deduplicated.
+      setScanning(false)
       const now = Date.now()
       if (lastScanRef.current.text === serial && now - lastScanRef.current.at < 1500) return
       lastScanRef.current = { text: serial, at: now }
       setForm((current) => ({ ...current, serialNumber: serial }))
-      setScanning(false)
       push('Serial scanned')
     },
     [push],

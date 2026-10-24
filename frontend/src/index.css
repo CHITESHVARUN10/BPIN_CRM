@@ -24,26 +24,9 @@
 }
 
 @layer components {
-  .qr-scan-scale {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-  }
-  .qr-scan-box {
-    position: relative;
+  .qr-camera-video {
     width: 100%;
     height: 100%;
-    overflow: hidden;
-  }
-  .qr-scan-scale > .qr-scan-box {
-    width: 1920px;
-    height: auto;
-    transform: scale(var(--qr-preview-scale, 0.2));
-    transform-origin: top left;
-  }
-  .qr-scan-box video {
-    width: 100% !important;
-    height: auto !important;
     object-fit: contain;
     display: block;
   }
