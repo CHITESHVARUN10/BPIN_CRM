@@ -1,225 +1,291 @@
 import { useEffect, useRef, useState } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { Camera, CameraOff, Flashlight, Minus, Plus, X } from 'lucide-react'
 
 export default function QRScanner({ onResult, onClose }) {
   const [error, setError] = useState(null)
+  const [notice, setNotice] = useState('')
+  const [ready, setReady] = useState(false)
+  const [cameraId, setCameraId] = useState('')
+  const [cameras, setCameras] = useState([])
+  const [attempt, setAttempt] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [zoomRange, setZoomRange] = useState(null)
   const [torchAvailable, setTorchAvailable] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [focusPoint, setFocusPoint] = useState(null)
+  const [focusAvailable, setFocusAvailable] = useState(false)
+  const [focusRange, setFocusRange] = useState(null)
+  const [focusDistance, setFocusDistance] = useState(0)
+  const [manualFocus, setManualFocus] = useState(false)
+  const [aspectRatio, setAspectRatio] = useState(4 / 3)
   const onResultRef = useRef(onResult)
   const scannerRef = useRef(null)
+  const sessionRef = useRef(null)
+  const lifecycleRef = useRef(Promise.resolve())
+  const frameRef = useRef(null)
   const fileInputRef = useRef(null)
   const focusTimerRef = useRef(null)
+  const focusResetRef = useRef(null)
+  const focusRequestRef = useRef(0)
+  const mountedRef = useRef(false)
 
   useEffect(() => {
     onResultRef.current = onResult
   }, [onResult])
 
   useEffect(() => {
-    // Browsers only expose getUserMedia on HTTPS or localhost — fail fast with a clear message.
-    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      setError('Camera needs HTTPS (or localhost). On this link, please enter the serial number manually.')
-      return undefined
-    }
-
-    const scanner = new Html5Qrcode('qr-scan-box')
-    scannerRef.current = scanner
-    let timer = null
-    let stopped = false
-    let handled = false
-
-    const stopCamera = () => {
-      try {
-        scanner.pause(true)
-      } catch {
-        // Scanner may not have reached the scanning state yet.
-      }
-      try {
-        scanner
-          .stop()
-          .then(() => scanner.clear())
-          .catch(() => {})
-      } catch {
-        // Scanner already stopped.
-      }
-    }
-
-    const stop = () => {
-      if (stopped) return
-      stopped = true
-      clearTimeout(timer)
-      stopCamera()
-    }
-
-    scanner
-      .start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.86)
-            return { width: edge, height: edge }
-          },
-          videoConstraints: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1440 },
-            height: { ideal: 1080 },
-            aspectRatio: { ideal: 4 / 3 },
-            advanced: [{ focusMode: 'continuous' }],
-          },
-        },
-        (text) => {
-          if (stopped || handled) return
-          handled = true
-          stop()
-          onResultRef.current?.(text.trim())
-        },
-        () => {},
-      )
-      .then(() => {
-        // StrictMode can unmount while camera startup is still pending.
-        if (stopped) {
-          stopCamera()
-          return
-        }
-        try {
-          const capabilities = scanner.getRunningTrackCapabilities()
-          const settings = scanner.getRunningTrackSettings()
-          const zoomCap = capabilities?.zoom
-          if (
-            zoomCap &&
-            Number.isFinite(zoomCap.min) &&
-            Number.isFinite(zoomCap.max) &&
-            zoomCap.max > zoomCap.min
-          ) {
-            const min = Math.max(1, zoomCap.min)
-            const max = Math.min(4, zoomCap.max)
-            if (max > min) {
-              const current = Number(settings?.zoom)
-              setZoomRange({ min, max, step: Number(zoomCap.step) || 0.5 })
-              setZoom(Math.min(max, Math.max(min, Number.isFinite(current) ? current : min)))
-            }
-          }
-          const torch = scanner.getRunningTrackCameraCapabilities?.().torchFeature?.()
-          setTorchAvailable(Boolean(torch?.isSupported?.()))
-        } catch {
-          // Zoom and torch are optional browser capabilities.
-        }
-      })
-      .catch((err) => {
-        if (stopped) return
-        const name = String(err?.name || err || '')
-        if (name.includes('NotAllowed') || name.includes('Permission')) {
-          setError('Camera permission was denied. Allow camera access, or enter the serial number manually.')
-        } else if (name.includes('NotFound') || name.includes('Devices')) {
-          setError('No camera available on this device. Enter the serial number manually.')
-        } else {
-          setError("Couldn't open the camera. Enter the serial number manually.")
-        }
-      })
-
-    timer = setTimeout(() => {
-      if (!stopped && !handled) {
-        stop()
-        setError("Couldn't scan. Point steadily at the QR code, or enter it manually.")
-      }
-    }, 20000)
-
-    return () => {
-      clearTimeout(focusTimerRef.current)
-      if (scannerRef.current === scanner) scannerRef.current = null
-      stop()
-    }
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
   }, [])
 
+  useEffect(() => {
+    // html5-qrcode decodes at the element's layout resolution, not videoWidth.
+    // Keep a 1920px surface and scale only its presentation down to the phone.
+    const frame = frameRef.current
+    const observer = new ResizeObserver(() => {
+      frame.style.setProperty('--qr-preview-scale', frame.clientWidth / 1920)
+    })
+    observer.observe(frame)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    let scanner
+    let closing
+    let handled = false
+    const session = {
+      photo: false,
+      finish(text) {
+        const value = text?.trim()
+        if (cancelled || handled || !value) return
+        handled = true
+        void stopCamera()
+        onResultRef.current?.(value)
+      },
+      stop: () => stopCamera(),
+    }
+    const stopCamera = () => {
+      if (!scanner) return Promise.resolve()
+      if (!closing) {
+        closing = (async () => {
+          try {
+            if (scanner.isScanning) await scanner.stop()
+          } catch {
+            // A scan result can arrive while camera startup is completing.
+          }
+          try { scanner.clear() } catch { /* Already cleared. */ }
+        })()
+      }
+      return closing
+    }
+
+    // Serialize startup/teardown, including StrictMode and camera changes.
+    const start = lifecycleRef.current.then(async () => {
+      if (cancelled) return
+      setReady(false)
+      setError(null)
+      setNotice('')
+      setZoomRange(null)
+      setTorchAvailable(false)
+      setTorchOn(false)
+      setFocusAvailable(false)
+      setFocusRange(null)
+      setManualFocus(false)
+      setFocusPoint(null)
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        setError('Camera needs HTTPS (or localhost). Use a photo or enter the serial number manually.')
+        return
+      }
+      scanner = new Html5Qrcode('qr-scan-box', {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false,
+      })
+      scannerRef.current = scanner
+      sessionRef.current = session
+      try {
+        await scanner.start(
+          cameraId || { facingMode: 'environment' },
+          {
+            fps: 8,
+            disableFlip: true,
+            // Scan the whole frame, retaining detail and accepting off-centre labels.
+            videoConstraints: {
+              ...(cameraId ? { deviceId: { exact: cameraId } } : { facingMode: { ideal: 'environment' } }),
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 24, max: 30 },
+            },
+          },
+          (text) => { if (!session.photo) session.finish(text) },
+          () => {},
+        )
+        if (cancelled || handled) { await stopCamera(); return }
+        const video = document.querySelector('#qr-scan-box video')
+        if (video?.videoWidth && video.videoHeight) setAspectRatio(video.videoWidth / video.videoHeight)
+        setReady(true)
+        // These capabilities are optional; an unsupported control must not fail startup.
+        const settings = scanner.getRunningTrackSettings()
+        let capabilities = {}
+        try { capabilities = scanner.getRunningTrackCapabilities() } catch { /* Older Safari. */ }
+        const zoomCap = capabilities.zoom
+        if (zoomCap && zoomCap.max > zoomCap.min) {
+          const min = zoomCap.min
+          const max = Math.min(8, zoomCap.max)
+          if (max > min) {
+            setZoomRange({ min, max, step: Math.max(0.1, zoomCap.step || 0.1) })
+            setZoom(Number.isFinite(settings.zoom) ? settings.zoom : min)
+          }
+        }
+        setTorchAvailable(Boolean(capabilities.torch))
+        const modes = capabilities.focusMode || []
+        setFocusAvailable(modes.includes('single-shot') || modes.includes('continuous'))
+        const distance = capabilities.focusDistance
+        if (modes.includes('manual') && distance?.max > distance?.min) {
+          setFocusRange(distance)
+          setFocusDistance(settings.focusDistance ?? distance.min)
+        }
+        if (modes.includes('continuous')) {
+          try { await scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] }) } catch { /* Optional. */ }
+        }
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          if (!cancelled) setCameras(devices.filter((device) => device.kind === 'videoinput'))
+        } catch { /* Camera switching is optional. */ }
+      } catch (err) {
+        if (cancelled) return
+        const name = String(err?.name || err || '')
+        if (name.includes('NotAllowed') || name.includes('Permission')) {
+          setError('Camera permission was denied. Allow camera access, use a photo, or enter the serial number manually.')
+        } else if (name.includes('NotFound') || name.includes('Devices')) {
+          setError('No camera available. Use a photo or enter the serial number manually.')
+        } else {
+          setError("Couldn't open this camera. Try another camera, use a photo, or enter the serial number manually.")
+        }
+      }
+    })
+    lifecycleRef.current = start.catch(() => {})
+    return () => {
+      cancelled = true
+      clearTimeout(focusTimerRef.current)
+      clearTimeout(focusResetRef.current)
+      focusRequestRef.current += 1
+      if (sessionRef.current === session) sessionRef.current = null
+      if (scannerRef.current === scanner) scannerRef.current = null
+      lifecycleRef.current = start.catch(() => {}).then(stopCamera)
+    }
+  }, [cameraId, attempt])
+
   const adjustZoom = async (direction) => {
-    if (!zoomRange || !scannerRef.current) return
-    const next = Math.min(
-      zoomRange.max,
-      Math.max(zoomRange.min, Number((zoom + direction * zoomRange.step).toFixed(2))),
-    )
-    setZoom(next)
+    const scanner = scannerRef.current
+    if (!zoomRange || !scanner || !ready) return
+    const next = Math.min(zoomRange.max, Math.max(zoomRange.min, Number((zoom + direction * 0.5).toFixed(2))))
     try {
-      await scannerRef.current.applyVideoConstraints({ advanced: [{ zoom: next }] })
+      await scanner.applyVideoConstraints({ advanced: [{ zoom: next }] })
+      if (scannerRef.current === scanner) setZoom(scanner.getRunningTrackSettings().zoom ?? zoom)
     } catch {
-      // Zoom is best-effort on browsers that expose it.
+      setNotice('This camera could not change zoom. Try another lens or use a photo.')
     }
   }
 
   const toggleTorch = async () => {
     const scanner = scannerRef.current
-    if (!scanner) return
+    if (!scanner || !ready) return
     try {
-      const torch = scanner.getRunningTrackCameraCapabilities().torchFeature()
       const next = !torchOn
-      await torch.apply(next)
-      setTorchOn(next)
+      await scanner.applyVideoConstraints({ advanced: [{ torch: next }] })
+      if (scannerRef.current === scanner) setTorchOn(Boolean(scanner.getRunningTrackSettings().torch))
     } catch {
-      // Torch is best-effort on browsers that expose it.
+      setNotice('Flash is unavailable on this camera.')
     }
   }
 
   const focusAt = async (event) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
-    setFocusPoint({ x, y, id: Date.now() })
-    clearTimeout(focusTimerRef.current)
-    focusTimerRef.current = setTimeout(() => setFocusPoint(null), 1100)
-
     const scanner = scannerRef.current
-    if (!scanner) return
+    if (!scanner || !ready || !focusAvailable) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left - event.currentTarget.clientLeft) / event.currentTarget.clientWidth))
+    const y = Math.min(1, Math.max(0, (event.clientY - rect.top - event.currentTarget.clientTop) / event.currentTarget.clientHeight))
+    const request = ++focusRequestRef.current
+    clearTimeout(focusTimerRef.current)
+    clearTimeout(focusResetRef.current)
     try {
-      await scanner.applyVideoConstraints({
-        advanced: [{ focusMode: 'single-shot', pointsOfInterest: [{ x, y }] }],
-      })
+      const capabilities = scanner.getRunningTrackCapabilities()
+      const modes = capabilities.focusMode || []
+      const mode = modes.includes('single-shot') ? 'single-shot' : 'continuous'
+      // Request the advertised mode only. Browsers may silently ignore advanced constraints.
+      await scanner.applyVideoConstraints({ advanced: [{ focusMode: mode, pointsOfInterest: [{ x, y }] }] })
+      if (scannerRef.current !== scanner || request !== focusRequestRef.current) return
+      const settings = scanner.getRunningTrackSettings()
+      if (settings.focusMode !== mode) {
+        setNotice('Tap focus is unavailable here. Move back, try another camera, or use a photo.')
+        return
+      }
+      setManualFocus(false)
+      setFocusPoint({ x, y, id: request })
+      setNotice('Focus requested. Hold steady while the label becomes sharp.')
+      focusTimerRef.current = setTimeout(() => setFocusPoint(null), 1200)
+      if (mode === 'single-shot' && modes.includes('continuous')) {
+        focusResetRef.current = setTimeout(() => {
+          if (scannerRef.current === scanner && request === focusRequestRef.current) {
+            scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
+          }
+        }, 1800)
+      }
     } catch {
-      try {
-        await scanner.applyVideoConstraints({
-          advanced: [{ focusMode: 'continuous', pointsOfInterest: [{ x, y }] }],
-        })
-      } catch {
-        // Focus control is best-effort on browsers that expose it.
-      }
+      setNotice('This browser cannot refocus this camera. Try another camera or use a photo.')
     }
-    setTimeout(() => {
-      try {
-        scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
-      } catch {
-        // Scanner may have closed after the tap.
-      }
-    }, 1400)
+  }
+
+  const changeFocus = async (value) => {
+    const scanner = scannerRef.current
+    if (!scanner || !ready) return
+    ++focusRequestRef.current
+    clearTimeout(focusResetRef.current)
+    try {
+      await scanner.applyVideoConstraints({ advanced: [{ focusMode: 'manual', focusDistance: value }] })
+      if (scannerRef.current !== scanner) return
+      const settings = scanner.getRunningTrackSettings()
+      if (settings.focusMode !== 'manual') throw new Error('Manual focus ignored')
+      setManualFocus(true)
+      setFocusDistance(settings.focusDistance ?? value)
+    } catch {
+      setNotice('Manual focus is unavailable on this camera. Try another camera or use a photo.')
+    }
   }
 
   const decodePhoto = async (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
-    if (!file || !scannerRef.current) return
+    if (!file || photoBusy) return
+    const session = sessionRef.current
+    if (!session) return
+    session.photo = true
     setPhotoBusy(true)
+    setReady(false)
+    clearTimeout(focusResetRef.current)
+    // Use a separate, hidden decoder so photo errors never remove the camera surface.
+    const target = document.createElement('div')
+    target.id = `qr-photo-${Date.now()}`
+    target.hidden = true
+    document.body.appendChild(target)
+    const decoder = new Html5Qrcode(target.id, { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false })
     try {
-      const scanner = scannerRef.current
-      try {
-        await scanner.stop()
-      } catch {
-        // Camera may already be stopped.
-      }
-      try {
-        scanner.clear()
-      } catch {
-        // Clearing an already-empty scan region is harmless.
-      }
-      const result = await scanner.scanFileV2(file, false)
-      const text = result?.decodedText?.trim()
-      if (!text) throw new Error('No QR code found')
-      onResultRef.current?.(text)
+      await session.stop()
+      const result = await decoder.scanFileV2(file, false)
+      if (!result?.decodedText?.trim()) throw new Error('No QR code found')
+      session.finish(result.decodedText)
     } catch {
-      setError('No QR code was found in that photo. Try again with the code filling the photo, or enter it manually.')
+      if (mountedRef.current && sessionRef.current === session) {
+        setAttempt((current) => current + 1)
+        setNotice('No QR found. Try a sharper photo with the code filling more of the picture.')
+      }
     } finally {
-      setPhotoBusy(false)
+      decoder.clear()
+      target.remove()
+      if (mountedRef.current) setPhotoBusy(false)
     }
   }
 
@@ -228,7 +294,7 @@ export default function QRScanner({ onResult, onClose }) {
       <div className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))]">
         <p className="text-white text-[15px] font-semibold">Scan product QR code</p>
         <div className="flex items-center gap-1">
-          {torchAvailable && (
+          {ready && torchAvailable && (
             <button
               type="button"
               className={`p-2.5 rounded-xl transition ${torchOn ? 'bg-amber-400 text-zinc-950' : 'text-zinc-300 hover:bg-white/10'}`}
@@ -250,9 +316,9 @@ export default function QRScanner({ onResult, onClose }) {
           </button>
         </div>
       </div>
-      <div className="flex-1 flex flex-col items-center justify-center px-3 pb-5">
+      <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center px-3 pb-5">
         <div className="w-full" style={{ width: 'min(94vw, 520px)' }}>
-          {error ? (
+          {error && (
             <div className="card bg-white p-6 text-center">
               <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 grid place-items-center text-zinc-500">
                 <CameraOff size={22} />
@@ -263,9 +329,11 @@ export default function QRScanner({ onResult, onClose }) {
                 Enter manually
               </button>
             </div>
-          ) : (
+          )}
             <div
-              className="qr-scanner-frame relative rounded-3xl overflow-hidden border-4 border-accent bg-black aspect-[4/3]"
+              ref={frameRef}
+              style={{ aspectRatio }}
+              className={`${error ? 'hidden' : ''} qr-scanner-frame relative rounded-3xl overflow-hidden border-4 border-accent bg-black`}
               onClick={focusAt}
             >
               <div className="qr-scan-scale">
@@ -278,7 +346,7 @@ export default function QRScanner({ onResult, onClose }) {
                   style={{ left: `${focusPoint.x * 100}%`, top: `${focusPoint.y * 100}%` }}
                 />
               )}
-              {zoomRange && (
+              {ready && zoomRange && (
                 <div
                   className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/70 p-1.5 backdrop-blur"
                   onClick={(event) => event.stopPropagation()}
@@ -305,12 +373,46 @@ export default function QRScanner({ onResult, onClose }) {
                 </div>
               )}
             </div>
+          {cameras.length > 1 && (
+            <label className="mt-3 block text-xs text-zinc-300">
+              Camera
+              <select
+                aria-label="Camera"
+                className="mt-1 w-full rounded-xl bg-zinc-800 p-2.5 text-white"
+                value={cameraId}
+                disabled={photoBusy}
+                onChange={(event) => setCameraId(event.target.value)}
+              >
+                <option value="">Automatic rear camera</option>
+                {cameras.map((camera, index) => (
+                  <option key={camera.deviceId} value={camera.deviceId}>{camera.label || `Camera ${index + 1}`}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {ready && focusRange && (
+            <label className="mt-3 block text-xs text-zinc-300">
+              {manualFocus ? 'Manual focus — slide until the QR is sharp' : 'Blurry? Adjust focus manually'}
+              <input
+                type="range"
+                aria-label="Manual focus distance"
+                className="mt-2 w-full"
+                min={focusRange.min}
+                max={focusRange.max}
+                step={focusRange.step || (focusRange.max - focusRange.min) / 100}
+                value={focusDistance}
+                onChange={(event) => changeFocus(Number(event.target.value))}
+              />
+            </label>
           )}
           <div className="mt-4 rounded-2xl bg-white/10 px-4 py-3 text-center">
-            <p className="text-[14px] font-medium text-white">Tap the label to focus</p>
-            <p className="mt-1 text-[12px] text-zinc-400">
-              Align the QR code with the frame. Too close and blurry? Move back; use + if it appears.
+            <p className="text-[14px] font-medium text-white">
+              {photoBusy ? 'Reading photo…' : ready ? (focusAvailable ? 'Tap the QR code to refocus' : 'Hold steady while the camera focuses') : error ? 'Try a photo of the label' : 'Opening camera…'}
             </p>
+            <p className="mt-1 text-[12px] text-zinc-400">
+              Keep the whole QR visible. If blurry, move back and use +. For tiny labels, try another rear camera or take a close-up photo.
+            </p>
+            {notice && <p role="status" className="mt-2 text-xs text-amber-200">{notice}</p>}
             <button
               type="button"
               className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium text-accent hover:text-white disabled:opacity-50"

@@ -36,15 +36,15 @@
     overflow: hidden;
   }
   .qr-scan-scale > .qr-scan-box {
-    width: 200%;
-    height: 200%;
-    transform: scale(0.5);
+    width: 1920px;
+    height: auto;
+    transform: scale(var(--qr-preview-scale, 0.2));
     transform-origin: top left;
   }
   .qr-scan-box video {
     width: 100% !important;
-    height: 100% !important;
-    object-fit: cover;
+    height: auto !important;
+    object-fit: contain;
     display: block;
   }
   .btn {
