@@ -11,7 +11,7 @@ export function createQRDecoder() {
     clearTimeout(request.timer)
     pending.delete(data.id)
     if (data.error) request.reject(new Error(data.error))
-    else request.resolve(data.text || '')
+    else request.resolve({ text: data.text || '', candidate: data.candidate || null })
   }
   worker.onerror = () => close(new Error('QR decoder could not load. Please reopen the scanner.'))
   function close(error = new Error('Scanner closed')) {
@@ -24,7 +24,7 @@ export function createQRDecoder() {
     pending.clear()
   }
   return {
-    decode(image, enhance = false) {
+    inspect(image, enhance = false) {
       if (closed) return Promise.reject(new Error('Scanner closed'))
       const id = ++sequence
       return new Promise((resolve, reject) => {
@@ -32,6 +32,9 @@ export function createQRDecoder() {
         pending.set(id, { resolve, reject, timer })
         worker.postMessage({ id, image, enhance }, [image.data.buffer])
       })
+    },
+    decode(image, enhance = false) {
+      return this.inspect(image, enhance).then((result) => result.text)
     },
     close,
   }

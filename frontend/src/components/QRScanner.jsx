@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { captureRegion, createQRDecoder, scanRegion } from '../utils/qrDecoder'
+import { applyCameraControls, loadPreferredCamera, savePreferredCamera } from '../utils/qrCamera'
 import { Camera, CameraOff, Flashlight, Minus, Plus, X } from 'lucide-react'
 
 export default function QRScanner({ onResult, onClose }) {
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState('')
   const [ready, setReady] = useState(false)
-  const [cameraId, setCameraId] = useState('')
+  const [cameraId, setCameraId] = useState(loadPreferredCamera)
   const [cameras, setCameras] = useState([])
   const [attempt, setAttempt] = useState(0)
   const [zoom, setZoom] = useState(1)
@@ -15,6 +16,7 @@ export default function QRScanner({ onResult, onClose }) {
   const [torchOn, setTorchOn] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [focusPoint, setFocusPoint] = useState(null)
+  const [detectedQR, setDetectedQR] = useState(null)
   const [focusAvailable, setFocusAvailable] = useState(false)
   const [focusRange, setFocusRange] = useState(null)
   const [focusDistance, setFocusDistance] = useState(0)
@@ -30,6 +32,7 @@ export default function QRScanner({ onResult, onClose }) {
   const focusResetRef = useRef(null)
   const focusRequestRef = useRef(0)
   const scanPointRef = useRef({ x: 0.5, y: 0.5 })
+  const detectedQRRef = useRef(null)
   const photoBusyRef = useRef(false)
   const photoDecoderRef = useRef(null)
   const mountedRef = useRef(false)
@@ -79,6 +82,8 @@ export default function QRScanner({ onResult, onClose }) {
       setFocusRange(null)
       setManualFocus(false)
       setFocusPoint(null)
+      setDetectedQR(null)
+      detectedQRRef.current = null
       scanPointRef.current = { x: 0.5, y: 0.5 }
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
         setError('Camera needs HTTPS (or localhost). Use a photo or enter the serial number manually.')
@@ -95,12 +100,12 @@ export default function QRScanner({ onResult, onClose }) {
           if (err.name !== 'OverconstrainedError') throw err
           stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: camera })
         }
-        if (cancelled) { stop(); return }
+        if (cancelled || handled) { stop(); return }
         const track = stream.getVideoTracks()[0]
         trackRef.current = track
         video.srcObject = stream
         await video.play()
-        if (cancelled) { stop(); return }
+        if (cancelled || handled) { stop(); return }
         const updateAspect = () => {
           if (!cancelled && video.videoWidth && video.videoHeight) setAspectRatio(video.videoWidth / video.videoHeight)
         }
@@ -127,7 +132,7 @@ export default function QRScanner({ onResult, onClose }) {
           setFocusDistance(settings.focusDistance ?? distance.min)
         }
         if (modes.includes('continuous')) {
-          try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }) } catch { /* Optional. */ }
+          try { await applyCameraControls(track, { focusMode: 'continuous' }) } catch { /* Optional. */ }
         }
         if (cancelled) { stop(); return }
         decoder = createQRDecoder()
@@ -136,13 +141,38 @@ export default function QRScanner({ onResult, onClose }) {
           if (cancelled || handled) return
           try {
             if (!photoBusyRef.current && !document.hidden && video.readyState >= 2 && video.videoWidth) {
-              // Alternate native-detail crops with a full-frame pass. Crops keep
-              // small modules intact and suppress distracting label text.
+              // Always revisit the full frame at native detail: a tiny label
+              // outside the centre must not be lost to preview downscaling.
+              const frameWidth = video.videoWidth
+              const frameHeight = video.videoHeight
               const fraction = [0.4, 0.75, 1][frame++ % 3]
-              const region = scanRegion(video.videoWidth, video.videoHeight, scanPointRef.current, fraction)
-              const image = captureRegion(video, canvas, region, fraction === 1 ? 2560 : 2048)
-              const text = await decoder.decode(image, fraction !== 1)
-              if (!photoBusyRef.current) session.finish(text)
+              let region = scanRegion(frameWidth, frameHeight, scanPointRef.current, fraction)
+              const detected = detectedQRRef.current
+              if (detected && performance.now() - detected.at < 1500 && fraction !== 1) {
+                const edge = Math.max(detected.width * frameWidth, detected.height * frameHeight) * 1.8
+                region = scanRegion(frameWidth, frameHeight,
+                  { x: detected.x + detected.width / 2, y: detected.y + detected.height / 2 },
+                  Math.min(0.95, Math.max(0.08, edge / Math.min(frameWidth, frameHeight))))
+              }
+              const image = captureRegion(video, canvas, region, fraction === 1 ? 4096 : 2048)
+              const result = await decoder.inspect(image, fraction !== 1)
+              if (cancelled || handled) return
+              if (photoBusyRef.current) { timer = setTimeout(scan, 120); return }
+              if (result.text) { session.finish(result.text); return }
+              if (result.candidate && video.videoWidth === frameWidth && video.videoHeight === frameHeight) {
+                const candidate = {
+                  x: (region.x + result.candidate.x * region.width) / frameWidth,
+                  y: (region.y + result.candidate.y * region.height) / frameHeight,
+                  width: result.candidate.width * region.width / frameWidth,
+                  height: result.candidate.height * region.height / frameHeight,
+                  at: performance.now(),
+                }
+                detectedQRRef.current = candidate
+                setDetectedQR(candidate)
+              } else if (detected && performance.now() - detected.at >= 1500) {
+                detectedQRRef.current = null
+                setDetectedQR(null)
+              }
             }
           } catch {
             if (!cancelled && !handled) {
@@ -152,7 +182,7 @@ export default function QRScanner({ onResult, onClose }) {
               return
             }
           }
-          if (!cancelled && !handled) timer = setTimeout(scan, 180)
+          if (!cancelled && !handled) timer = setTimeout(scan, 100)
         }
         void scan()
         try {
@@ -164,6 +194,12 @@ export default function QRScanner({ onResult, onClose }) {
         if (cancelled) return
         setReady(false)
         const name = String(err?.name || err || '')
+        if (cameraId && (name.includes('NotFound') || name.includes('Overconstrained'))) {
+          savePreferredCamera('')
+          setCameraId('')
+          setNotice('That camera is no longer available. Trying the automatic rear camera.')
+          return
+        }
         if (name.includes('NotAllowed') || name.includes('Permission')) {
           setError('Camera permission was denied. Allow camera access, use a photo, or enter the serial number manually.')
         } else if (name.includes('NotFound') || name.includes('Devices')) {
@@ -194,8 +230,12 @@ export default function QRScanner({ onResult, onClose }) {
     const steps = Math.round((value - zoomRange.min) / zoomRange.step)
     const next = Math.min(zoomRange.max, Math.max(zoomRange.min, zoomRange.min + steps * zoomRange.step))
     try {
-      await track.applyConstraints({ advanced: [{ zoom: next }] })
-      if (trackRef.current === track) setZoom(track.getSettings().zoom ?? zoom)
+      await applyCameraControls(track, { zoom: next })
+      if (trackRef.current === track) {
+        setZoom(track.getSettings().zoom ?? zoom)
+        detectedQRRef.current = null
+        setDetectedQR(null)
+      }
     } catch {
       setNotice('This camera could not change zoom. Try another lens or use a photo.')
     }
@@ -205,7 +245,7 @@ export default function QRScanner({ onResult, onClose }) {
     const track = trackRef.current
     if (!track || !ready) return
     try {
-      await track.applyConstraints({ advanced: [{ torch: !torchOn }] })
+      await applyCameraControls(track, { torch: !torchOn })
       if (trackRef.current === track) setTorchOn(Boolean(track.getSettings().torch))
     } catch { setNotice('Flash is unavailable on this camera.') }
   }
@@ -218,6 +258,8 @@ export default function QRScanner({ onResult, onClose }) {
     const x = Math.min(1, Math.max(0, (event.clientX - rect.left - element.clientLeft) / element.clientWidth))
     const y = Math.min(1, Math.max(0, (event.clientY - rect.top - element.clientTop) / element.clientHeight))
     scanPointRef.current = { x, y }
+    detectedQRRef.current = null
+    setDetectedQR(null)
     const request = ++focusRequestRef.current
     clearTimeout(focusTimerRef.current)
     clearTimeout(focusResetRef.current)
@@ -231,7 +273,7 @@ export default function QRScanner({ onResult, onClose }) {
     try {
       const modes = track.getCapabilities?.().focusMode || []
       const mode = modes.includes('single-shot') ? 'single-shot' : 'continuous'
-      await track.applyConstraints({ advanced: [{ focusMode: mode, pointsOfInterest: [{ x, y }] }] })
+      await applyCameraControls(track, { focusMode: mode, pointsOfInterest: [{ x, y }] })
       if (trackRef.current !== track || request !== focusRequestRef.current) return
       if (track.getSettings().focusMode !== mode) {
         setNotice('Reading the tapped area. This browser did not apply lens focus; move back or use a photo if blurry.')
@@ -242,7 +284,7 @@ export default function QRScanner({ onResult, onClose }) {
       if (mode === 'single-shot' && modes.includes('continuous')) {
         focusResetRef.current = setTimeout(() => {
           if (trackRef.current === track && request === focusRequestRef.current) {
-            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
+            applyCameraControls(track, { focusMode: 'continuous' }).catch(() => {})
           }
         }, 1800)
       }
@@ -255,7 +297,7 @@ export default function QRScanner({ onResult, onClose }) {
     ++focusRequestRef.current
     clearTimeout(focusResetRef.current)
     try {
-      await track.applyConstraints({ advanced: [{ focusMode: 'manual', focusDistance: value }] })
+      await applyCameraControls(track, { focusMode: 'manual', focusDistance: value })
       if (trackRef.current !== track) return
       const settings = track.getSettings()
       if (settings.focusMode !== 'manual') throw new Error('Manual focus ignored')
@@ -272,7 +314,6 @@ export default function QRScanner({ onResult, onClose }) {
     if (!session) return
     photoBusyRef.current = true
     setPhotoBusy(true)
-    clearTimeout(focusResetRef.current)
     const url = URL.createObjectURL(file)
     let decoder
     try {
@@ -292,7 +333,7 @@ export default function QRScanner({ onResult, onClose }) {
       }
       for (const region of regions) {
         if (!mountedRef.current || sessionRef.current !== session) return
-        const text = await decoder.decode(captureRegion(image, canvas, region, 3200), true)
+        const text = await decoder.decode(captureRegion(image, canvas, region, 4096), true)
         if (text) { session.finish(text); return }
       }
       setNotice('No QR found in this photo. Take a sharper close-up with the entire code visible, or enter the serial manually.')
@@ -357,6 +398,12 @@ export default function QRScanner({ onResult, onClose }) {
             onClick={focusAt}
           >
             <video ref={videoRef} autoPlay muted playsInline className="qr-camera-video" />
+            {detectedQR && (
+              <span
+                className="pointer-events-none absolute z-10 rounded-lg border-2 border-amber-300"
+                style={{ left: `${detectedQR.x * 100}%`, top: `${detectedQR.y * 100}%`, width: `${detectedQR.width * 100}%`, height: `${detectedQR.height * 100}%` }}
+              />
+            )}
             {focusPoint && (
               <span
                 key={focusPoint.id}
@@ -399,7 +446,7 @@ export default function QRScanner({ onResult, onClose }) {
                 className="mt-1 w-full rounded-xl bg-zinc-800 p-2.5 text-white"
                 value={cameraId}
                 disabled={photoBusy}
-                onChange={(event) => { setNotice(''); setCameraId(event.target.value) }}
+                onChange={(event) => { setNotice(''); savePreferredCamera(event.target.value); setCameraId(event.target.value) }}
               >
                 <option value="">Automatic rear camera</option>
                 {cameras.map((camera, index) => (
@@ -426,7 +473,7 @@ export default function QRScanner({ onResult, onClose }) {
           )}
           <div className="mt-4 rounded-2xl bg-white/10 px-4 py-3 text-center">
             <p className="text-[14px] font-medium text-white">
-              {photoBusy ? 'Reading photo…' : ready ? (focusAvailable ? 'Tap the QR to focus and read' : 'Tap the QR to read that area') : error ? 'Try a photo of the label' : 'Opening camera…'}
+              {photoBusy ? 'Reading photo…' : detectedQR ? 'QR found — hold steady' : ready ? (focusAvailable ? 'Tap the QR to focus and read' : 'Tap the QR to read that area') : error ? 'Try a photo of the label' : 'Opening camera…'}
             </p>
             <p className="mt-1 text-[12px] text-zinc-400">
               Keep the whole QR visible. If blurry, move back and use +. For tiny labels, try another rear camera or take a close-up photo.
