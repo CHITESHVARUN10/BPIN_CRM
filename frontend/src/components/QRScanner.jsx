@@ -48,7 +48,13 @@ export default function QRScanner({ onResult, onClose }) {
     scanner
       .start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        {
+          fps: 10,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72)
+            return { width: edge, height: edge }
+          },
+        },
         (text) => {
           if (stopped || handled) return
           handled = true
@@ -85,8 +91,8 @@ export default function QRScanner({ onResult, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[80] bg-zinc-950/95 flex flex-col">
-      <div className="flex items-center justify-between px-4 pt-4">
-        <p className="text-white text-sm font-medium">Scan product QR code</p>
+      <div className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+        <p className="text-white text-[15px] font-semibold">Scan product QR code</p>
         <button
           type="button"
           className="p-2.5 rounded-xl text-zinc-300 hover:bg-white/10"
@@ -98,8 +104,11 @@ export default function QRScanner({ onResult, onClose }) {
           <X size={20} />
         </button>
       </div>
-      <div className="flex-1 grid place-items-center px-4">
-        <div className="w-full max-w-sm">
+      <div className="flex-1 flex flex-col items-center justify-center px-3 pb-5">
+        <div
+          className="w-full"
+          style={{ width: 'min(92vw, 430px, calc(100svh - 190px))' }}
+        >
           {error ? (
             <div className="card bg-white p-6 text-center">
               <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-100 grid place-items-center text-zinc-500">
@@ -112,11 +121,14 @@ export default function QRScanner({ onResult, onClose }) {
               </button>
             </div>
           ) : (
-            <div className="rounded-3xl overflow-hidden border-4 border-accent bg-black">
-              <div id="qr-scan-box" className="w-[264px] h-[264px]" />
+            <div className="qr-scanner-frame rounded-3xl overflow-hidden border-4 border-accent bg-black aspect-square">
+              <div id="qr-scan-box" className="qr-scan-box" />
             </div>
           )}
-          <p className="mt-4 text-center text-[12.5px] text-zinc-400">Align the QR code inside the frame</p>
+          <div className="mt-4 rounded-2xl bg-white/10 px-4 py-3 text-center">
+            <p className="text-[14px] font-medium text-white">Align the QR code with the frame</p>
+            <p className="mt-1 text-[12px] text-zinc-400">Hold steady — scanning is automatic.</p>
+          </div>
         </div>
       </div>
     </div>

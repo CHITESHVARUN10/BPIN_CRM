@@ -21,6 +21,11 @@ dist/
 # ── Test artifacts & scratch ─────────────────────────────────────
 test-artifacts/
 
+# ── Local QR scan test assets ────────────────────────────────────
+/assets/WhatsApp Image 2026-10-24 at 11.04.42.jpeg
+/assets/WhatsApp Image 2026-10-24 at 11.04.42 (1).jpeg
+/assets/scan-test-23W4G223E2601201367.png
+
 # ── Internal handoff doc (never commit) ──────────────────────────
 HANDOFF.md
 HOSTING.md
