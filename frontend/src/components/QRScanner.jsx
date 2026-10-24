@@ -9,9 +9,11 @@ export default function QRScanner({ onResult, onClose }) {
   const [torchAvailable, setTorchAvailable] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
+  const [focusPoint, setFocusPoint] = useState(null)
   const onResultRef = useRef(onResult)
   const scannerRef = useRef(null)
   const fileInputRef = useRef(null)
+  const focusTimerRef = useRef(null)
 
   useEffect(() => {
     onResultRef.current = onResult
@@ -128,6 +130,7 @@ export default function QRScanner({ onResult, onClose }) {
     }, 20000)
 
     return () => {
+      clearTimeout(focusTimerRef.current)
       if (scannerRef.current === scanner) scannerRef.current = null
       stop()
     }
@@ -158,6 +161,38 @@ export default function QRScanner({ onResult, onClose }) {
     } catch {
       // Torch is best-effort on browsers that expose it.
     }
+  }
+
+  const focusAt = async (event) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
+    setFocusPoint({ x, y, id: Date.now() })
+    clearTimeout(focusTimerRef.current)
+    focusTimerRef.current = setTimeout(() => setFocusPoint(null), 1100)
+
+    const scanner = scannerRef.current
+    if (!scanner) return
+    try {
+      await scanner.applyVideoConstraints({
+        advanced: [{ focusMode: 'single-shot', pointsOfInterest: [{ x, y }] }],
+      })
+    } catch {
+      try {
+        await scanner.applyVideoConstraints({
+          advanced: [{ focusMode: 'continuous', pointsOfInterest: [{ x, y }] }],
+        })
+      } catch {
+        // Focus control is best-effort on browsers that expose it.
+      }
+    }
+    setTimeout(() => {
+      try {
+        scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
+      } catch {
+        // Scanner may have closed after the tap.
+      }
+    }, 1400)
   }
 
   const decodePhoto = async (event) => {
@@ -229,12 +264,25 @@ export default function QRScanner({ onResult, onClose }) {
               </button>
             </div>
           ) : (
-            <div className="qr-scanner-frame relative rounded-3xl overflow-hidden border-4 border-accent bg-black aspect-[4/3]">
+            <div
+              className="qr-scanner-frame relative rounded-3xl overflow-hidden border-4 border-accent bg-black aspect-[4/3]"
+              onClick={focusAt}
+            >
               <div className="qr-scan-scale">
                 <div id="qr-scan-box" className="qr-scan-box" />
               </div>
+              {focusPoint && (
+                <span
+                  key={focusPoint.id}
+                  className="pointer-events-none absolute z-10 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-2xl border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+                  style={{ left: `${focusPoint.x * 100}%`, top: `${focusPoint.y * 100}%` }}
+                />
+              )}
               {zoomRange && (
-                <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/70 p-1.5 backdrop-blur">
+                <div
+                  className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/70 p-1.5 backdrop-blur"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   <button
                     type="button"
                     className="grid h-8 w-8 place-items-center rounded-full text-white hover:bg-white/15 disabled:opacity-35"
@@ -259,9 +307,9 @@ export default function QRScanner({ onResult, onClose }) {
             </div>
           )}
           <div className="mt-4 rounded-2xl bg-white/10 px-4 py-3 text-center">
-            <p className="text-[14px] font-medium text-white">Align the QR code with the frame</p>
+            <p className="text-[14px] font-medium text-white">Tap the label to focus</p>
             <p className="mt-1 text-[12px] text-zinc-400">
-              Too close and blurry? Move back slightly; use + to zoom if available.
+              Align the QR code with the frame. Too close and blurry? Move back; use + if it appears.
             </p>
             <button
               type="button"
