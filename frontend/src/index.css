@@ -24,11 +24,22 @@
 }
 
 @layer components {
+  .qr-scan-scale {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
   .qr-scan-box {
     position: relative;
     width: 100%;
     height: 100%;
     overflow: hidden;
+  }
+  .qr-scan-scale > .qr-scan-box {
+    width: 200%;
+    height: 200%;
+    transform: scale(0.5);
+    transform-origin: top left;
   }
   .qr-scan-box video {
     width: 100% !important;
