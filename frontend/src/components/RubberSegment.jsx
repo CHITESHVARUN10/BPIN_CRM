@@ -189,7 +189,7 @@ export default function RubberSegment({
       {slotWidth > 0 ? (
         <motion.span
           aria-hidden="true"
-          className="absolute left-0 z-0 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.14)] ring-1 ring-black/5 dark:bg-zinc-100"
+          className="segment-thumb absolute left-0 z-0 shadow-[0_1px_2px_rgba(0,0,0,0.14)] ring-1 ring-black/5"
           style={{
             top: inset,
             bottom: inset,

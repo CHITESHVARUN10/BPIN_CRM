@@ -177,6 +177,13 @@
 .dark .text-red-700 { color: var(--color-red-300); }
 .dark .bg-red-600 { background-color: var(--color-red-600); }
 
+/* The global `.dark .bg-white` remap above would otherwise turn the control
+   thumb and the active chart toggle dark, making their dark text invisible. */
+.segment-thumb { background-color: #fff; }
+.dark .segment-thumb { background-color: var(--color-zinc-100); }
+.chart-toggle-active { background-color: #fff; }
+.dark .chart-toggle-active { background-color: var(--color-zinc-700); }
+
 .dark .recharts-cartesian-grid line { stroke: var(--color-zinc-800); }
 .dark .recharts-cartesian-axis-tick text { fill: var(--color-zinc-500); }
 .dark .recharts-tooltip-wrapper .recharts-default-tooltip { background: var(--color-zinc-900) !important; border-color: var(--color-zinc-700) !important; color: var(--color-zinc-100) !important; }

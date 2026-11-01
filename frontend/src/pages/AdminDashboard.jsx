@@ -60,7 +60,7 @@ function ChartTypeToggle({ value, onChange }) {
           onClick={() => onChange(option)}
           className={`grid h-7 w-7 place-items-center rounded-md transition ${
             value === option
-              ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100'
+              ? 'chart-toggle-active text-zinc-900 shadow-sm dark:text-zinc-100'
               : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
           }`}
         >
