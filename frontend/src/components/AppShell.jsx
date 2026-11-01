@@ -34,7 +34,7 @@ const ADMIN_NAV = [
   { to: '/admin/logs', label: 'Logs', icon: History },
 ]
 
-const WIDE_ROUTES = ['/admin/products', '/admin/users', '/admin/problems', '/admin/logs', '/admin/assignments']
+const WIDE_ROUTES = ['/admin/products', '/admin/users', '/admin/problems', '/admin/logs', '/admin/assignments', '/admin/records']
 
 export default function AppShell() {
   const { user, logout } = useAuth()

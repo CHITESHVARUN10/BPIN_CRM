@@ -117,25 +117,52 @@ export default function AdminRecords() {
       ) : items.length === 0 ? (
         <EmptyState title={`No records in ${periodLabel(mode, anchor)}`} hint="Try another period or clear the filters." />
       ) : (
-        <div className="space-y-2">
-          {items.map((r) => (
-            <Link key={r._id} to={`/admin/reports/${r._id}`} className="card p-3.5 block active:bg-zinc-50 transition">
-              <div className="flex items-center gap-2">
-                <span className="chip chip-strong font-mono">{r.tokenNo}</span>
-                {r.status === 'open' ? <span className="chip chip-open">Open</span> : <span className="chip">Closed</span>}
-                <span className="text-[11px] text-zinc-400 ml-auto">{formatDate(r.visitDate)}</span>
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-900 truncate">{r.productSnapshot?.description}</p>
-                  <p className="text-[12px] text-zinc-500 truncate">
-                    {r.technician?.name} · <span className="font-mono">{r.serialNumber}</span>
-                  </p>
-                </div>
-                <p className="text-[12px] font-medium text-zinc-700 text-right shrink-0">{r.problem?.name}</p>
-              </div>
-            </Link>
-          ))}
+        <div className="card overflow-x-auto">
+          <table className="data-table min-w-[1080px]">
+            <thead>
+              <tr>
+                <th className="w-[160px]">Token</th>
+                <th>Product</th>
+                <th className="w-[170px]">Technician</th>
+                <th className="w-[190px]">Problem</th>
+                <th className="w-[120px]">Visit date</th>
+                <th className="w-[100px]">Status</th>
+                <th className="w-[100px] text-right">Report</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <tr key={r._id}>
+                  <td>
+                    <Link to={`/admin/reports/${r._id}`} className="chip chip-strong font-mono transition hover:opacity-80">
+                      {r.tokenNo}
+                    </Link>
+                  </td>
+                  <td>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">{r.productSnapshot?.description || '—'}</p>
+                    <p className="mt-0.5 font-mono text-[11px] text-zinc-400">{r.serialNumber}</p>
+                  </td>
+                  <td>
+                    <p className="text-[13px] text-zinc-700">{r.technician?.name || '—'}</p>
+                  </td>
+                  <td>
+                    <p className="text-[13px] text-zinc-700">{r.problem?.name || '—'}</p>
+                  </td>
+                  <td>
+                    <p className="text-[12px] tabular-nums text-zinc-600">{formatDate(r.visitDate)}</p>
+                  </td>
+                  <td>
+                    {r.status === 'open' ? <span className="chip chip-open">Open</span> : <span className="chip">Closed</span>}
+                  </td>
+                  <td className="text-right">
+                    <Link to={`/admin/reports/${r._id}`} className="btn btn-sm btn-outline">
+                      Open
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

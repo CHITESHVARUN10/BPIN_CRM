@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { KeyRound, Pencil, ShieldAlert, UserCheck, UserPlus, UserX, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { KeyRound, Pencil, Search, ShieldAlert, UserCheck, UserPlus, UserX, X } from 'lucide-react'
 import api from '../api/client.js'
 import { EmptyState, SkeletonRows, formatDate, ConfirmDialog } from '../components/ui.jsx'
 import PasswordInput from '../components/PasswordInput.jsx'
@@ -58,6 +58,7 @@ export default function AdminUsers() {
   const { user: me } = useAuth()
   const isSuperAdmin = me?.superAdmin === true
   const [items, setItems] = useState(null)
+  const [q, setQ] = useState('')
   const [form, setForm] = useState(emptyForm)
   const [addOpen, setAddOpen] = useState(false)
   const [formErr, setFormErr] = useState('')
@@ -142,13 +143,27 @@ export default function AdminUsers() {
   }
 
   const selfId = String(me?._id || '')
+  const visibleItems = useMemo(() => {
+    if (!items) return []
+    const needle = q.trim().toLowerCase()
+    if (!needle) return items
+    return items.filter((u) =>
+      [u.name, u.email, u.phone, u.region, u.role].filter(Boolean).join(' ').toLowerCase().includes(needle),
+    )
+  }, [items, q])
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Users</h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">{items?.length ?? '…'} accounts</p>
+          <p className="text-[13px] text-zinc-500 mt-0.5">
+            {items === null
+              ? '… accounts'
+              : q.trim()
+                ? `${visibleItems.length} of ${items.length} accounts`
+                : `${items.length} accounts`}
+          </p>
         </div>
         <button
           type="button"
@@ -163,10 +178,34 @@ export default function AdminUsers() {
         </button>
       </div>
 
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+        <input
+          className="input pl-9 pr-11"
+          placeholder="Search name, email, phone or region…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          autoComplete="off"
+          aria-label="Search users"
+        />
+        {q ? (
+          <button
+            type="button"
+            onClick={() => setQ('')}
+            className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+            aria-label="Clear search"
+          >
+            <X size={14} />
+          </button>
+        ) : null}
+      </div>
+
       {items === null ? (
         <SkeletonRows rows={6} className="h-12" />
       ) : items.length === 0 ? (
         <EmptyState title="No users yet" />
+      ) : visibleItems.length === 0 ? (
+        <EmptyState title="No users match" hint="Try a different name, email, phone or region." />
       ) : (
         <div className="card overflow-x-auto">
           <table className="data-table min-w-[980px]">
@@ -180,7 +219,7 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {items.map((u) => {
+              {visibleItems.map((u) => {
                 const self = String(u._id) === selfId
                 const lockedAdmin = u.role === 'admin' && !isSuperAdmin
                 return (

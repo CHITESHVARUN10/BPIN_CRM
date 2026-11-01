@@ -103,7 +103,7 @@ export default function AdminAssignments() {
         <p className="text-[13px] text-zinc-500 mt-0.5">Assign visits to engineers, then track which reports are still pending</p>
       </div>
 
-      <section className="max-w-4xl space-y-3">
+      <section className="mx-auto max-w-4xl space-y-3">
         <div>
           <h2 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">Create assignment</h2>
           <p className="text-[12px] text-zinc-400 mt-0.5">Hand out a customer visit to an active service engineer.</p>
