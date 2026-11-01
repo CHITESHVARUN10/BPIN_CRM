@@ -177,7 +177,7 @@
 .dark .text-red-700 { color: var(--color-red-300); }
 .dark .bg-red-600 { background-color: var(--color-red-600); }
 
-.dark .recharts-area-curve { stroke: var(--color-zinc-300); }
-.dark .recharts-area-area { fill: var(--color-zinc-800); }
+.dark .recharts-cartesian-grid line { stroke: var(--color-zinc-800); }
 .dark .recharts-cartesian-axis-tick text { fill: var(--color-zinc-500); }
 .dark .recharts-tooltip-wrapper .recharts-default-tooltip { background: var(--color-zinc-900) !important; border-color: var(--color-zinc-700) !important; color: var(--color-zinc-100) !important; }
+.recharts-surface:focus { outline: none; }
