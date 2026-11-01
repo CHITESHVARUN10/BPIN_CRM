@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, CalendarDays, ClipboardList, FilePlus2, History, House, LayoutDashboard, MapPin, Package, ShieldCheck, SquareActivity, UserRound, LogOut, Wrench } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNotifications } from '../context/NotificationsContext.jsx'
@@ -34,11 +34,15 @@ const ADMIN_NAV = [
   { to: '/admin/logs', label: 'Logs', icon: History },
 ]
 
+const WIDE_ROUTES = ['/admin/products', '/admin/users', '/admin/problems', '/admin/logs']
+
 export default function AppShell() {
   const { user, logout } = useAuth()
   const { unread } = useNotifications()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const isAdmin = user?.role === 'admin'
+  const wide = WIDE_ROUTES.includes(pathname)
   const adminNav =
     isAdmin && user?.superAdmin === true
       ? [...ADMIN_NAV, { to: '/admin/recovery', label: 'Recovery', icon: ShieldCheck }]
@@ -103,7 +107,7 @@ export default function AppShell() {
           </div>
         </div>
 
-        <main className="mx-auto w-full max-w-5xl px-4 pt-5 pb-24 md:pb-12">
+        <main className={`mx-auto w-full px-4 pt-5 pb-24 md:pb-12 ${wide ? 'max-w-[1440px]' : 'max-w-5xl'}`}>
           <Outlet />
         </main>
       </div>

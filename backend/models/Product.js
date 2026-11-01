@@ -5,6 +5,7 @@ const productSchema = new mongoose.Schema(
     sku: { type: String, required: true, unique: true, trim: true },
     description: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: 'Others' },
+    archived: { type: Boolean, default: false },
   },
   { timestamps: true },
 )

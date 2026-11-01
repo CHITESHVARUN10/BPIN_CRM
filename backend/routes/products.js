@@ -13,7 +13,8 @@ router.get('/', requireAuth, async (req, res, next) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25))
     const q = String(req.query.q || '').trim()
     const category = String(req.query.category || '').trim()
-    const filter = {}
+    const includeArchived = req.user.role === 'admin' && req.query.all === 'true'
+    const filter = includeArchived ? {} : { archived: { $ne: true } }
     if (q) filter.$or = [{ sku: new RegExp(escapeRx(q), 'i') }, { description: new RegExp(escapeRx(q), 'i') }]
     if (category) filter.category = category
     const total = await Product.countDocuments(filter)
@@ -65,6 +66,10 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       changes.push(`Category: ${product.category} → ${String(req.body.category).trim()}`)
       product.category = String(req.body.category).trim()
     }
+    if (typeof req.body?.archived === 'boolean' && req.body.archived !== product.archived) {
+      changes.push(`Archived: ${product.archived} → ${req.body.archived}`)
+      product.archived = req.body.archived
+    }
 
     await product.save()
     if (changes.length) {
@@ -82,7 +87,17 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
     const product = await Product.findById(req.params.id)
     if (!product) return res.status(404).json({ message: 'Product not found' })
     const used = await ServiceRecord.exists({ product: product._id })
-    if (used) return res.status(409).json({ message: 'This product is used by existing service records. Edit it instead.' })
+    if (used) {
+      product.archived = true
+      await product.save()
+      await logAudit(
+        req.user,
+        ACTIONS.productArchived,
+        { kind: 'product', id: product._id, label: `${product.sku} — ${product.description}` },
+        'Product archived because existing service records reference it',
+      )
+      return res.json({ ok: true, archived: true })
+    }
     await product.deleteOne()
     await logAudit(
       req.user,
@@ -90,7 +105,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       { kind: 'product', id: product._id, label: `${product.sku} — ${product.description}` },
       'Product removed from the catalog',
     )
-    res.json({ ok: true })
+    res.json({ ok: true, archived: false })
   } catch (err) {
     next(err)
   }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { ArchiveRestore, ChevronLeft, ChevronRight, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import api from '../api/client.js'
 import { ConfirmDialog, EmptyState, SkeletonRows } from '../components/ui.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -95,10 +95,19 @@ export default function AdminProducts() {
   const [modal, setModal] = useState(null) // null | {} | product
   const [deleteFor, setDeleteFor] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [busyId, setBusyId] = useState(null)
 
   const load = useCallback(async (pageNum = 1) => {
     try {
-      const res = await api.get('/products', { params: { page: pageNum, limit: 50, q: q.trim() || undefined, category: category || undefined } })
+      const res = await api.get('/products', {
+        params: {
+          page: pageNum,
+          limit: 50,
+          q: q.trim() || undefined,
+          category: category || undefined,
+          all: 'true',
+        },
+      })
       setItems(res.data.items)
       setPages(res.data.pages)
       setPage(res.data.page)
@@ -112,8 +121,8 @@ export default function AdminProducts() {
     if (!deleteFor) return
     setDeleting(true)
     try {
-      await api.delete(`/products/${deleteFor._id}`)
-      push('Product deleted')
+      const { data } = await api.delete(`/products/${deleteFor._id}`)
+      push(data.archived ? 'Product archived — existing records keep their snapshot' : 'Product deleted')
       const nextPage = items.length === 1 && page > 1 ? page - 1 : page
       setDeleteFor(null)
       await load(nextPage)
@@ -121,6 +130,19 @@ export default function AdminProducts() {
       push(error.response?.data?.message || 'Could not delete product', 'error')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const restore = async (product) => {
+    setBusyId(String(product._id))
+    try {
+      await api.patch(`/products/${product._id}`, { archived: false })
+      push('Product restored')
+      await load(page)
+    } catch (error) {
+      push(error.response?.data?.message || 'Could not restore product', 'error')
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -162,18 +184,19 @@ export default function AdminProducts() {
         <EmptyState icon={Package} title="No products found" hint="Try another search, or add the product manually." />
       ) : (
         <div className="card overflow-x-auto">
-          <table className="data-table min-w-[760px]">
+          <table className="data-table min-w-[860px]">
             <thead>
               <tr>
                 <th className="w-[210px]">Part number</th>
                 <th>Name</th>
-                <th className="w-[190px]">Category</th>
-                <th className="w-[190px] text-right">Actions</th>
+                <th className="w-[180px]">Category</th>
+                <th className="w-[120px]">Status</th>
+                <th className="w-[200px] text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {items.map((p) => (
-                <tr key={p._id}>
+                <tr key={p._id} className={p.archived ? 'opacity-60' : ''}>
                   <td>
                     <span className="font-mono text-[12px] text-zinc-600 dark:text-zinc-300">{p.sku}</span>
                   </td>
@@ -184,19 +207,47 @@ export default function AdminProducts() {
                     <span className="chip">{p.category}</span>
                   </td>
                   <td>
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button type="button" className="btn btn-sm btn-outline" onClick={() => setModal(p)}>
+                    {p.archived ? (
+                      <span className="chip">Archived</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Active
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline"
+                        disabled={busyId === String(p._id)}
+                        onClick={() => setModal(p)}
+                      >
                         <Pencil size={13} />
                         Edit
                       </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost btn-danger-ghost"
-                        onClick={() => setDeleteFor(p)}
-                      >
-                        <Trash2 size={14} />
-                        Delete
-                      </button>
+                      {p.archived ? (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          disabled={busyId === String(p._id)}
+                          onClick={() => restore(p)}
+                        >
+                          <ArchiveRestore size={14} />
+                          Restore
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost btn-danger-ghost"
+                          disabled={busyId === String(p._id)}
+                          onClick={() => setDeleteFor(p)}
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -225,7 +276,7 @@ export default function AdminProducts() {
         title={deleteFor ? `Delete "${deleteFor.description}"?` : 'Delete product?'}
         message={
           deleteFor
-            ? `${deleteFor.sku} will be removed from the catalog. This cannot be undone. Products already used by service records cannot be deleted.`
+            ? `${deleteFor.sku} will be removed from the catalog. If existing service records use it, it will be archived instead so old reports keep their snapshot and new reports cannot select it.`
             : ''
         }
         confirmLabel="Delete product"

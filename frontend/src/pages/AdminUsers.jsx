@@ -8,6 +8,27 @@ import { useAuth } from '../context/AuthContext.jsx'
 
 const REGIONS = ['MUMBAI', 'PUNE / MARATHWADA', 'DELHI / PUNJAB / UP / HARYANA', 'MADHYA PRADESH', 'WEST BENGAL / NORTH EAST', 'KARNATAKA', 'KERALA', 'TAMILNADU', 'ANDHRA / TELANGANA', 'GUJARAT', 'OTHER']
 
+const ROLE_STYLES = {
+  admin: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-300',
+  technician: 'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-900/70 dark:bg-teal-950/40 dark:text-teal-300',
+}
+const SUPER_ADMIN_STYLE = 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/70 dark:bg-violet-950/40 dark:text-violet-300'
+
+const AVATAR_STYLES = [
+  'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
+  'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300',
+  'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
+  'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+]
+
+function avatarStyle(name = '') {
+  let hash = 0
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) | 0
+  return AVATAR_STYLES[Math.abs(hash) % AVATAR_STYLES.length]
+}
+
 function Modal({ open, onClose, children }) {
   if (!open) return null
   return (
@@ -166,13 +187,21 @@ export default function AdminUsers() {
                   <tr key={String(u._id)} className={!u.active ? 'opacity-60' : ''}>
                     <td>
                       <div className="flex items-center gap-2.5">
-                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">
+                        <div
+                          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[10px] font-semibold ring-1 ring-black/5 dark:ring-white/10 ${avatarStyle(u.name)}`}
+                        >
                           {initials(u.name)}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <p className="truncate text-[13px] font-semibold text-zinc-900 dark:text-zinc-100">{u.name}</p>
-                            {u.superAdmin ? <span className="chip chip-open">Super admin</span> : null}
+                            {u.superAdmin ? (
+                              <span
+                                className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${SUPER_ADMIN_STYLE}`}
+                              >
+                                Super admin
+                              </span>
+                            ) : null}
                           </div>
                           <p className="truncate text-[11px] text-zinc-500">{u.email}</p>
                           {u.phone ? <p className="text-[10px] text-zinc-400">{u.phone}</p> : null}
@@ -180,7 +209,13 @@ export default function AdminUsers() {
                       </div>
                     </td>
                     <td>
-                      <span className={`chip capitalize ${u.role === 'admin' ? 'chip-strong' : ''}`}>{u.role}</span>
+                      <span
+                        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                          ROLE_STYLES[u.role] || ROLE_STYLES.technician
+                        }`}
+                      >
+                        {u.role}
+                      </span>
                     </td>
                     <td>
                       <p className="text-[12px] text-zinc-600 dark:text-zinc-300">{u.region || '—'}</p>
