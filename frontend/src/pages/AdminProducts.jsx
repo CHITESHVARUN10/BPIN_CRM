@@ -191,7 +191,7 @@ export default function AdminProducts() {
                       </button>
                       <button
                         type="button"
-                        className="btn btn-sm btn-ghost !text-red-600"
+                        className="btn btn-sm btn-ghost btn-danger-ghost"
                         onClick={() => setDeleteFor(p)}
                       >
                         <Trash2 size={14} />

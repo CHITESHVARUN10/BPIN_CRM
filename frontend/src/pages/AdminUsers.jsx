@@ -229,7 +229,7 @@ export default function AdminUsers() {
                           </button>
                           <button
                             type="button"
-                            className={`btn btn-sm ${u.active ? 'btn-ghost !text-red-600' : 'btn-outline'}`}
+                            className={`btn btn-sm ${u.active ? 'btn-ghost btn-danger-ghost' : 'btn-outline'}`}
                             disabled={busyId === String(u._id) || (self && u.active)}
                             onClick={() => setConfirmState({
                               title: u.active ? 'Deactivate account' : 'Activate account',

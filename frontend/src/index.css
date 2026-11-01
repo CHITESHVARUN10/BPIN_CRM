@@ -207,6 +207,8 @@
 .dark .segment-thumb { background-color: var(--color-zinc-100); }
 .chart-toggle-active { background-color: #fff; }
 .dark .chart-toggle-active { background-color: var(--color-zinc-700); }
+.btn-danger-ghost { color: var(--color-red-600); }
+.dark .btn-danger-ghost { color: var(--color-red-400); }
 
 .dark .recharts-cartesian-grid line { stroke: var(--color-zinc-800); }
 .dark .recharts-cartesian-axis-tick text { fill: var(--color-zinc-500); }
