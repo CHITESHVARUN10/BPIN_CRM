@@ -13,6 +13,7 @@ const ACTION_LABELS = {
   case_reopened: 'Case reopened',
   product_created: 'Product created',
   product_updated: 'Product updated',
+  product_deleted: 'Product deleted',
   assignment_created: 'Assignment handed out',
   assignment_updated: 'Assignment updated',
   assignment_report_missing: 'Assignment report missing',
@@ -87,7 +88,7 @@ export default function AdminLogs() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Logs</h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">Every important action by admins and engineers</p>
+          <p className="text-[13px] text-zinc-500 mt-0.5">{total} entries · Every important action by admins and engineers</p>
         </div>
         <div>
           <p className="text-[11px] font-medium text-zinc-500 mb-1">Action filter</p>
@@ -105,19 +106,45 @@ export default function AdminLogs() {
       ) : items.length === 0 ? (
         <EmptyState icon={History} title="No log entries" hint={action ? 'No actions of this type yet.' : 'Actions will appear here as the team works.'} />
       ) : (
-        <div className="space-y-2">
-          {items.map((log) => (
-            <div key={String(log._id)} className="card p-3.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`capitalize ${ROLE_COLORS[log.actorRole] || 'chip'}`}>{log.actorRole || 'system'}</span>
-                <p className="text-sm font-semibold text-zinc-900">{log.actorName || 'System'}</p>
-                <span className="chip">{ACTION_LABELS[log.action] || log.action}</span>
-                <span className="text-[11px] text-zinc-400 ml-auto">{formatDateTime(log.createdAt)}</span>
-              </div>
-              {log.targetLabel ? <p className="mt-1 text-[13px] text-zinc-800">{log.targetLabel}</p> : null}
-              {log.detail ? <p className="mt-1 text-[12px] text-zinc-500 break-words">{log.detail}</p> : null}
-            </div>
-          ))}
+        <div className="card overflow-x-auto">
+          <table className="data-table min-w-[980px]">
+            <thead>
+              <tr>
+                <th className="w-[150px]">When</th>
+                <th className="w-[190px]">Actor</th>
+                <th className="w-[120px]">Role</th>
+                <th className="w-[230px]">Action</th>
+                <th>Target / details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((log) => (
+                <tr key={String(log._id)}>
+                  <td className="whitespace-nowrap text-[12px] tabular-nums text-zinc-500">
+                    {formatDateTime(log.createdAt)}
+                  </td>
+                  <td>
+                    <p className="text-[12.5px] font-semibold text-zinc-900 dark:text-zinc-100">{log.actorName || 'System'}</p>
+                  </td>
+                  <td>
+                    <span className={`capitalize ${ROLE_COLORS[log.actorRole] || 'chip'}`}>{log.actorRole || 'system'}</span>
+                  </td>
+                  <td>
+                    <span className="chip">{ACTION_LABELS[log.action] || log.action}</span>
+                  </td>
+                  <td>
+                    {log.targetLabel ? (
+                      <p className="text-[12.5px] text-zinc-800 dark:text-zinc-200">{log.targetLabel}</p>
+                    ) : null}
+                    {log.detail ? (
+                      <p className="mt-0.5 break-words text-[11.5px] text-zinc-500">{log.detail}</p>
+                    ) : null}
+                    {!log.targetLabel && !log.detail ? <span className="text-zinc-400">—</span> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

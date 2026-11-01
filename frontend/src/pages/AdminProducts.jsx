@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Package, Pencil, Plus, Search, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import api from '../api/client.js'
-import { EmptyState, SkeletonRows } from '../components/ui.jsx'
+import { ConfirmDialog, EmptyState, SkeletonRows } from '../components/ui.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 
 const CATEGORIES = ['BP Car Multimedia', 'BP Car Accessories', 'Sound Product', 'ROCKFORD FOSGATE', 'Others']
@@ -93,6 +93,8 @@ export default function AdminProducts() {
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
   const [modal, setModal] = useState(null) // null | {} | product
+  const [deleteFor, setDeleteFor] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async (pageNum = 1) => {
     try {
@@ -105,6 +107,22 @@ export default function AdminProducts() {
       setItems([])
     }
   }, [q, category])
+
+  const remove = async () => {
+    if (!deleteFor) return
+    setDeleting(true)
+    try {
+      await api.delete(`/products/${deleteFor._id}`)
+      push('Product deleted')
+      const nextPage = items.length === 1 && page > 1 ? page - 1 : page
+      setDeleteFor(null)
+      await load(nextPage)
+    } catch (error) {
+      push(error.response?.data?.message || 'Could not delete product', 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     const t = setTimeout(() => load(1), q ? 350 : 0)
@@ -143,20 +161,48 @@ export default function AdminProducts() {
       ) : items.length === 0 ? (
         <EmptyState icon={Package} title="No products found" hint="Try another search, or add the product manually." />
       ) : (
-        <div className="space-y-2">
-          {items.map((p) => (
-            <div key={p._id} className="card p-3.5 flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-zinc-900 truncate">{p.description}</p>
-                <p className="text-[12px] text-zinc-500 font-mono">{p.sku}</p>
-              </div>
-              <span className="chip shrink-0">{p.category}</span>
-              <button type="button" className="btn btn-sm btn-outline shrink-0" onClick={() => setModal(p)}>
-                <Pencil size={13} />
-                Edit
-              </button>
-            </div>
-          ))}
+        <div className="card overflow-x-auto">
+          <table className="data-table min-w-[760px]">
+            <thead>
+              <tr>
+                <th className="w-[210px]">Part number</th>
+                <th>Name</th>
+                <th className="w-[190px]">Category</th>
+                <th className="w-[190px] text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((p) => (
+                <tr key={p._id}>
+                  <td>
+                    <span className="font-mono text-[12px] text-zinc-600 dark:text-zinc-300">{p.sku}</span>
+                  </td>
+                  <td>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">{p.description}</p>
+                  </td>
+                  <td>
+                    <span className="chip">{p.category}</span>
+                  </td>
+                  <td>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button type="button" className="btn btn-sm btn-outline" onClick={() => setModal(p)}>
+                        <Pencil size={13} />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost !text-red-600"
+                        onClick={() => setDeleteFor(p)}
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -173,6 +219,23 @@ export default function AdminProducts() {
           </button>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deleteFor)}
+        title={deleteFor ? `Delete "${deleteFor.description}"?` : 'Delete product?'}
+        message={
+          deleteFor
+            ? `${deleteFor.sku} will be removed from the catalog. This cannot be undone. Products already used by service records cannot be deleted.`
+            : ''
+        }
+        confirmLabel="Delete product"
+        danger
+        busy={deleting}
+        onClose={() => {
+          if (!deleting) setDeleteFor(null)
+        }}
+        onConfirm={remove}
+      />
 
       <ProductModal open={modal !== null} initial={modal && modal._id ? modal : null} onClose={() => setModal(null)} onSaved={() => load(page)} />
     </div>

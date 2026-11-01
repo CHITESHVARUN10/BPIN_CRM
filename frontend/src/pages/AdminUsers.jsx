@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { X, UserPlus, ShieldAlert } from 'lucide-react'
+import { KeyRound, Pencil, ShieldAlert, UserCheck, UserPlus, UserX, X } from 'lucide-react'
 import api from '../api/client.js'
 import { EmptyState, SkeletonRows, formatDate, ConfirmDialog } from '../components/ui.jsx'
 import PasswordInput from '../components/PasswordInput.jsx'
@@ -21,6 +21,17 @@ function Modal({ open, onClose, children }) {
 
 const emptyForm = { name: '', email: '', phone: '', region: REGIONS[0], role: 'technician', password: '' }
 
+function initials(name = '') {
+  return (
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join('') || '?'
+  )
+}
+
 export default function AdminUsers() {
   const push = useToast().push
   const { user: me } = useAuth()
@@ -33,8 +44,11 @@ export default function AdminUsers() {
   const [pwdFor, setPwdFor] = useState(null)
   const [pwdVal, setPwdVal] = useState('')
   const [confirmState, setConfirmState] = useState(null)
+  const [editFor, setEditFor] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', phone: '', region: REGIONS[0], role: 'technician' })
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  const setEdit = (k, v) => setEditForm((f) => ({ ...f, [k]: v }))
 
   const load = useCallback(() => {
     api
@@ -67,14 +81,46 @@ export default function AdminUsers() {
       await api.patch(`/users/${id}`, data)
       push(message)
       load()
+      return true
     } catch (err) {
       push(err.response?.data?.message || 'Update failed', 'error')
+      return false
     } finally {
       setBusyId(null)
       setPwdFor(null)
       setPwdVal('')
     }
   }
+
+  const openEdit = (user) => {
+    setEditFor(user)
+    setEditForm({
+      name: user.name || '',
+      phone: user.phone || '',
+      region: user.region || REGIONS[0],
+      role: user.role || 'technician',
+    })
+  }
+
+  const saveEdit = async (event) => {
+    event.preventDefault()
+    if (!editFor) return
+    if (!editForm.name.trim()) {
+      push('Name is required', 'error')
+      return
+    }
+
+    const payload = {
+      name: editForm.name.trim(),
+      phone: editForm.phone.trim(),
+      region: editForm.region,
+    }
+    if (isSuperAdmin && String(editFor._id) !== String(me?._id)) payload.role = editForm.role
+    const saved = await patch(editFor._id, payload, 'User updated')
+    if (saved) setEditFor(null)
+  }
+
+  const selfId = String(me?._id || '')
 
   return (
     <div className="space-y-5">
@@ -101,75 +147,111 @@ export default function AdminUsers() {
       ) : items.length === 0 ? (
         <EmptyState title="No users yet" />
       ) : (
-        <div className="space-y-2">
-          {items.map((u) => (
-            <div key={String(u._id)} className="card p-4">
-              <div className="flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-zinc-900">{u.name}</p>
-                    <span className={`chip capitalize ${u.role === 'admin' ? 'chip-strong' : ''}`}>{u.role}</span>
-                    {u.superAdmin ? <span className="chip chip-open">Super admin</span> : null}
-                    {!u.active && <span className="chip !bg-red-50 !text-red-700">Disabled</span>}
-                  </div>
-                  <p className="mt-0.5 text-[12.5px] text-zinc-500 truncate">{u.email}</p>
-                  <p className="text-[11px] text-zinc-400">
-                    {[u.region, u.phone, `Joined ${formatDate(u.createdAt)}`].filter(Boolean).join(' · ')}
-                  </p>
-                </div>
-              </div>
-              <div className="divider my-3" />
-              <div className="flex flex-wrap items-center gap-2">
-                {u.role === 'admin' && !isSuperAdmin ? (
-                  <span className="chip inline-flex items-center gap-1 !bg-accent/10 !text-accent">
-                    <ShieldAlert size={11} />
-                    Managed by super admin
-                  </span>
-                ) : (
-                  <>
-                    {isSuperAdmin ? (
-                      <select
-                        className="input !min-h-[36px] !w-auto text-[12.5px]"
-                        value={u.role}
-                        disabled={busyId === String(u._id)}
-                        onChange={(e) => patch(u._id, { role: e.target.value }, 'Role updated')}
+        <div className="card overflow-x-auto">
+          <table className="data-table min-w-[980px]">
+            <thead>
+              <tr>
+                <th className="w-[280px]">User</th>
+                <th className="w-[150px]">Role</th>
+                <th className="w-[180px]">Region</th>
+                <th className="w-[120px]">Status</th>
+                <th className="w-[360px] text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((u) => {
+                const self = String(u._id) === selfId
+                const lockedAdmin = u.role === 'admin' && !isSuperAdmin
+                return (
+                  <tr key={String(u._id)} className={!u.active ? 'opacity-60' : ''}>
+                    <td>
+                      <div className="flex items-center gap-2.5">
+                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">
+                          {initials(u.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate text-[13px] font-semibold text-zinc-900 dark:text-zinc-100">{u.name}</p>
+                            {u.superAdmin ? <span className="chip chip-open">Super admin</span> : null}
+                          </div>
+                          <p className="truncate text-[11px] text-zinc-500">{u.email}</p>
+                          {u.phone ? <p className="text-[10px] text-zinc-400">{u.phone}</p> : null}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`chip capitalize ${u.role === 'admin' ? 'chip-strong' : ''}`}>{u.role}</span>
+                    </td>
+                    <td>
+                      <p className="text-[12px] text-zinc-600 dark:text-zinc-300">{u.region || '—'}</p>
+                      <p className="text-[10px] text-zinc-400">Joined {formatDate(u.createdAt)}</p>
+                    </td>
+                    <td>
+                      <span
+                        className={`inline-flex items-center gap-1.5 text-[12px] font-medium ${
+                          u.active ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'
+                        }`}
                       >
-                        <option value="technician">Technician</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline"
-                      disabled={busyId === String(u._id)}
-                      onClick={() => {
-                        setPwdFor(u)
-                        setPwdVal('')
-                      }}
-                    >
-                      Reset password
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${u.active ? 'btn-ghost !text-red-700' : 'btn-outline'}`}
-                      disabled={busyId === String(u._id)}
-                      onClick={() => setConfirmState({
-                        title: u.active ? 'Deactivate account' : 'Activate account',
-                        message: u.active
-                          ? `${u.name} will lose access to the portal immediately. Their filed records stay intact.`
-                          : `${u.name} will regain access immediately.`,
-                        danger: u.active,
-                        confirmLabel: u.active ? 'Deactivate' : 'Activate',
-                        user: u,
-                      })}
-                    >
-                      {u.active ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
+                        <span className={`h-1.5 w-1.5 rounded-full ${u.active ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                        {u.active ? 'Active' : 'Disabled'}
+                      </span>
+                    </td>
+                    <td>
+                      {lockedAdmin ? (
+                        <div className="flex justify-end">
+                          <span className="chip inline-flex items-center gap-1 !bg-accent/10 !text-accent">
+                            <ShieldAlert size={11} />
+                            Managed by super admin
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            disabled={busyId === String(u._id)}
+                            onClick={() => openEdit(u)}
+                          >
+                            <Pencil size={13} />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            disabled={busyId === String(u._id)}
+                            onClick={() => {
+                              setPwdFor(u)
+                              setPwdVal('')
+                            }}
+                          >
+                            <KeyRound size={13} />
+                            Reset
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${u.active ? 'btn-ghost !text-red-600' : 'btn-outline'}`}
+                            disabled={busyId === String(u._id) || (self && u.active)}
+                            onClick={() => setConfirmState({
+                              title: u.active ? 'Deactivate account' : 'Activate account',
+                              message: u.active
+                                ? `${u.name} will lose access to the portal immediately. Their filed records stay intact.`
+                                : `${u.name} will regain access immediately.`,
+                              danger: u.active,
+                              confirmLabel: u.active ? 'Deactivate' : 'Activate',
+                              user: u,
+                            })}
+                          >
+                            {u.active ? <UserX size={13} /> : <UserCheck size={13} />}
+                            {u.active ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -221,6 +303,62 @@ export default function AdminUsers() {
           </div>
           {formErr ? <p className="text-[13px] text-red-600">{formErr}</p> : null}
           <button type="submit" className="btn w-full">Create user</button>
+        </form>
+      </Modal>
+
+      <Modal open={Boolean(editFor)} onClose={() => setEditFor(null)}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-zinc-900">Edit user</h2>
+          <button onClick={() => setEditFor(null)} className="p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-100" aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+        <form onSubmit={saveEdit} className="space-y-3">
+          <div>
+            <label className="label">Name<span className="text-red-600 ml-0.5">*</span></label>
+            <input className="input" value={editForm.name} onChange={(e) => setEdit('name', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Email</label>
+            <input className="input bg-zinc-50 text-zinc-500" value={editFor?.email || ''} readOnly />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Phone</label>
+              <input className="input" value={editForm.phone} onChange={(e) => setEdit('phone', e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Region</label>
+              <select className="input" value={editForm.region} onChange={(e) => setEdit('region', e.target.value)}>
+                {REGIONS.map((region) => (
+                  <option key={region} value={region}>{region}</option>
+                ))}
+                {editForm.region && !REGIONS.includes(editForm.region) ? (
+                  <option value={editForm.region}>{editForm.region}</option>
+                ) : null}
+              </select>
+            </div>
+          </div>
+          {isSuperAdmin ? (
+            <div>
+              <label className="label">Role</label>
+              <select
+                className="input"
+                value={editForm.role}
+                disabled={String(editFor?._id) === selfId}
+                onChange={(e) => setEdit('role', e.target.value)}
+              >
+                <option value="technician">Technician</option>
+                <option value="admin">Admin</option>
+              </select>
+              {String(editFor?._id) === selfId ? (
+                <p className="mt-1 text-[11px] text-zinc-400">You cannot change your own admin role.</p>
+              ) : null}
+            </div>
+          ) : null}
+          <button type="submit" className="btn w-full" disabled={busyId === String(editFor?._id)}>
+            {busyId === String(editFor?._id) ? 'Saving…' : 'Save changes'}
+          </button>
         </form>
       </Modal>
 

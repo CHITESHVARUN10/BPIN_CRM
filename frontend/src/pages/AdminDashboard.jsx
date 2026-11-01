@@ -8,7 +8,6 @@ import {
   GitCompareArrows,
   Package,
   RefreshCw,
-  Sparkles,
   TrendingUp,
   Users,
 } from 'lucide-react'
@@ -202,13 +201,7 @@ export default function AdminDashboard() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 text-accent">
-              <Sparkles size={14} />
-            </span>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Field intelligence</p>
-          </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight md:text-[28px]">Admin dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">Admin dashboard</h1>
           <p className="mt-1 text-[13px] text-zinc-500">
             {summary
               ? `${formatNumber(total)} records · ${days} ${days === 1 ? 'day' : 'days'} · ${periodSubtitle(mode, anchor)}`

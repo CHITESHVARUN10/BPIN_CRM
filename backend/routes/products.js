@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import Product from '../models/Product.js'
+import ServiceRecord from '../models/ServiceRecord.js'
 import { requireAuth, requireAdmin } from '../middleware/auth.js'
 import { escapeRx, isObjectId } from '../utils/common.js'
 import { logAudit, ACTIONS } from '../utils/log.js'
@@ -70,6 +71,26 @@ router.patch('/:id', requireAuth, requireAdmin, async (req, res, next) => {
       await logAudit(req.user, ACTIONS.productUpdated, { kind: 'product', id: product._id, label: `${product.sku} — ${product.description}` }, changes.join(' | '))
     }
     res.json({ item: product })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.delete('/:id', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Product not found' })
+    const product = await Product.findById(req.params.id)
+    if (!product) return res.status(404).json({ message: 'Product not found' })
+    const used = await ServiceRecord.exists({ product: product._id })
+    if (used) return res.status(409).json({ message: 'This product is used by existing service records. Edit it instead.' })
+    await product.deleteOne()
+    await logAudit(
+      req.user,
+      ACTIONS.productDeleted,
+      { kind: 'product', id: product._id, label: `${product.sku} — ${product.description}` },
+      'Product removed from the catalog',
+    )
+    res.json({ ok: true })
   } catch (err) {
     next(err)
   }

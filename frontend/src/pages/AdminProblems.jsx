@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Archive, ArchiveRestore, Plus } from 'lucide-react'
+import { Archive, ArchiveRestore, Pencil, Plus } from 'lucide-react'
 import api from '../api/client.js'
 import { EmptyState, SkeletonRows, ConfirmDialog } from '../components/ui.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -87,43 +87,97 @@ export default function AdminProblems() {
       ) : items.length === 0 ? (
         <EmptyState title="No problems yet" hint="Add the common issues engineers should pick from." />
       ) : (
-        <div className="space-y-2">
-          {items.map((p) => (
-            <div key={String(p._id)} className={`card p-3.5 flex items-center gap-3 ${p.archived ? 'opacity-55' : ''}`}>
-              <div className="min-w-0 flex-1">
-                {editing === String(p._id) ? (
-                  <input className="input !min-h-[38px]" value={editVal} onChange={(e) => setEditVal(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') saveEdit() }} />
-                ) : (
-                  <p className="text-sm font-medium text-zinc-900 truncate">{p.name}</p>
-                )}
-              </div>
-              {p.archived ? <span className="chip">Archived</span> : null}
-              {editing === String(p._id) ? (
-                <>
-                  <button type="button" className="btn btn-sm" disabled={busyId === editing || !editVal.trim()} onClick={saveEdit}>Save</button>
-                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => { setEditing(null); setEditVal('') }}>Cancel</button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost !text-[12.5px]"
-                  disabled={busyId === String(p._id)}
-                  onClick={() => { setEditing(String(p._id)); setEditVal(p.name) }}
-                >
-                  Rename
-                </button>
-              )}
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                disabled={busyId === String(p._id)}
-                onClick={() => (p.archived ? toggleArchive(p) : setArchiveFor(p))}
-                aria-label={p.archived ? 'Restore' : 'Archive'}
-              >
-                {p.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-              </button>
-            </div>
-          ))}
+        <div className="card overflow-x-auto">
+          <table className="data-table min-w-[640px]">
+            <thead>
+              <tr>
+                <th>Problem</th>
+                <th className="w-[140px]">Status</th>
+                <th className="w-[280px] text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((p) => {
+                const isEditing = editing === String(p._id)
+                const busy = busyId === String(p._id)
+                return (
+                  <tr key={String(p._id)} className={p.archived ? 'opacity-60' : ''}>
+                    <td>
+                      {isEditing ? (
+                        <input
+                          className="input !min-h-[36px]"
+                          value={editVal}
+                          onChange={(e) => setEditVal(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              saveEdit()
+                            }
+                          }}
+                        />
+                      ) : (
+                        <p className="font-medium text-zinc-900 dark:text-zinc-100">{p.name}</p>
+                      )}
+                    </td>
+                    <td>
+                      {p.archived ? (
+                        <span className="chip">Archived</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Active
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        {isEditing ? (
+                          <>
+                            <button type="button" className="btn btn-sm" disabled={busy || !editVal.trim()} onClick={saveEdit}>
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-ghost"
+                              onClick={() => {
+                                setEditing(null)
+                                setEditVal('')
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            disabled={busy}
+                            onClick={() => {
+                              setEditing(String(p._id))
+                              setEditVal(p.name)
+                            }}
+                          >
+                            <Pencil size={13} />
+                            Rename
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${p.archived ? 'btn-outline' : 'btn-ghost'}`}
+                          disabled={busy}
+                          onClick={() => (p.archived ? toggleArchive(p) : setArchiveFor(p))}
+                        >
+                          {p.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                          {p.archived ? 'Restore' : 'Archive'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
