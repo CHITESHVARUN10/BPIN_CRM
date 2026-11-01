@@ -84,15 +84,15 @@ export default function AdminAssignments() {
     })
   }, [allItems, segment, techFilter, dateFilter, q])
 
-  const groups = useMemo(() => {
-    const map = new Map()
-    for (const assignment of visible) {
-      const key = dateKey(assignment.visitDate)
-      if (!map.has(key)) map.set(key, [])
-      map.get(key).push(assignment)
-    }
-    return [...map.entries()].sort(([a], [b]) => b.localeCompare(a))
-  }, [visible])
+  const rows = useMemo(
+    () =>
+      [...visible].sort((a, b) => {
+        const byVisit = new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime()
+        if (byVisit !== 0) return byVisit
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      }),
+    [visible],
+  )
 
   const hasFilters = Boolean(q || techFilter || dateFilter || segment !== 'all')
 
@@ -103,7 +103,7 @@ export default function AdminAssignments() {
         <p className="text-[13px] text-zinc-500 mt-0.5">Assign visits to engineers, then track which reports are still pending</p>
       </div>
 
-      <section className="space-y-3">
+      <section className="max-w-4xl space-y-3">
         <div>
           <h2 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">Create assignment</h2>
           <p className="text-[12px] text-zinc-400 mt-0.5">Hand out a customer visit to an active service engineer.</p>
@@ -237,62 +237,88 @@ export default function AdminAssignments() {
 
         {items === null ? (
           <SkeletonRows rows={4} className="h-14" />
-        ) : visible.length === 0 ? (
+        ) : rows.length === 0 ? (
           <EmptyState
             title={hasFilters ? 'No assignments match' : 'No assignments yet'}
             hint={hasFilters ? 'Try clearing the filters or choosing another date.' : 'Use the create section above to hand out the first visit.'}
           />
         ) : (
-          <div className="space-y-5">
-            {groups.map(([date, rows]) => (
-              <div key={date}>
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{formatDate(rows[0].visitDate)}</p>
-                  <span className="text-[11px] text-zinc-400">{rows.length} visit{rows.length === 1 ? '' : 's'}</span>
-                </div>
-                <div className="space-y-2.5">
-                  {rows.map((a) => (
-                    <div key={String(a._id)} className="card p-4">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-zinc-900">{a.customerName}</p>
-                        {a.reportFiled ? (
-                          <span className="chip chip-strong inline-flex items-center gap-1"><CheckCircle2 size={11} /> Report filed</span>
-                        ) : (
-                          <span className="chip chip-open inline-flex items-center gap-1"><Clock size={11} /> Report pending</span>
-                        )}
-                        <span className="text-[11px] text-zinc-400 ml-auto">To {a.assignedTo?.name || '—'}</span>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-zinc-700">
-                        <a href={`tel:${a.customerPhone}`} className="link-accent inline-flex items-center gap-1.5 font-medium">
-                          <Phone size={13} /> {a.customerPhone}
-                        </a>
-                        <span className="inline-flex items-center gap-1.5"><Clock size={13} className="text-zinc-400" /> {formatDate(a.visitDate)} · {a.timing}</span>
-                      </div>
-                      <p className="mt-2 text-[13px] text-zinc-700 whitespace-pre-line">{a.address}{a.pincode ? `, ${a.pincode}` : ''}</p>
-                      {a.notes ? <p className="mt-2 text-[12.5px] text-zinc-500 bg-zinc-50 border border-zinc-100 rounded-xl p-2.5">{a.notes}</p> : null}
+          <div className="card overflow-x-auto">
+            <table className="data-table min-w-[1120px]">
+              <thead>
+                <tr>
+                  <th className="w-[220px]">Customer</th>
+                  <th className="w-[150px]">Engineer</th>
+                  <th className="w-[180px]">Visit</th>
+                  <th className="w-[160px]">Status</th>
+                  <th>Address / notes</th>
+                  <th className="w-[180px] text-right">Report</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((a) => (
+                  <tr key={String(a._id)}>
+                    <td className="align-top">
+                      <p className="font-semibold text-zinc-900">{a.customerName}</p>
+                      <a href={`tel:${a.customerPhone}`} className="link-accent mt-0.5 inline-flex items-center gap-1 text-[12px] font-medium">
+                        <Phone size={12} />
+                        {a.customerPhone}
+                      </a>
+                    </td>
+                    <td className="align-top">
+                      <p className="text-[13px] text-zinc-700">{a.assignedTo?.name || '—'}</p>
+                      <p className="mt-0.5 text-[10.5px] text-zinc-400">By {a.assignedBy?.name || '—'}</p>
+                    </td>
+                    <td className="align-top">
+                      <p className="text-[13px] text-zinc-700">{formatDate(a.visitDate)}</p>
+                      <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-zinc-400">
+                        <Clock size={11} />
+                        {a.timing}
+                      </p>
+                      <p className="mt-0.5 text-[10.5px] text-zinc-400">Created {formatDateTime(a.createdAt)}</p>
+                    </td>
+                    <td className="align-top">
+                      {a.reportFiled ? (
+                        <span className="chip chip-strong inline-flex items-center gap-1">
+                          <CheckCircle2 size={11} />
+                          Report filed
+                        </span>
+                      ) : (
+                        <span className="chip chip-open inline-flex items-center gap-1">
+                          <Clock size={11} />
+                          Report pending
+                        </span>
+                      )}
                       {!a.reportFiled && a.lastReminderAt ? (
-                        <p className="mt-2 text-[11.5px] text-amber-700">Daily reminder sent {formatDateTime(a.lastReminderAt)}</p>
+                        <p className="mt-1 text-[10.5px] text-amber-700">Reminder {formatDateTime(a.lastReminderAt)}</p>
                       ) : null}
-                      <div className="divider my-3" />
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-[11px] text-zinc-400">
-                          By {a.assignedBy?.name || '—'} · {formatDateTime(a.createdAt)}
-                          {a.doneAt ? ` · done ${formatDateTime(a.doneAt)}` : ''}
+                      {a.doneAt ? <p className="mt-1 text-[10.5px] text-zinc-400">Done {formatDateTime(a.doneAt)}</p> : null}
+                    </td>
+                    <td className="align-top">
+                      <p className="whitespace-pre-line text-[12.5px] text-zinc-700">
+                        {a.address}
+                        {a.pincode ? `, ${a.pincode}` : ''}
+                      </p>
+                      {a.notes ? (
+                        <p className="mt-1 line-clamp-2 text-[11.5px] text-zinc-500" title={a.notes}>
+                          Note: {a.notes}
                         </p>
-                        {a.reportFiled && a.serviceRecord?._id ? (
-                          <Link to={`/admin/reports/${a.serviceRecord._id}`} className="btn btn-sm btn-outline">
-                            <FileText size={14} />
-                            View report
-                          </Link>
-                        ) : (
-                          <span className="text-[11px] text-zinc-400">Awaiting engineer report</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+                      ) : null}
+                    </td>
+                    <td className="align-top text-right">
+                      {a.reportFiled && a.serviceRecord?._id ? (
+                        <Link to={`/admin/reports/${a.serviceRecord._id}`} className="btn btn-sm btn-outline">
+                          <FileText size={14} />
+                          View report
+                        </Link>
+                      ) : (
+                        <span className="text-[11px] text-zinc-400">Awaiting engineer report</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>

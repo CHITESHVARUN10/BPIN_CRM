@@ -11,6 +11,10 @@
 @layer base {
   html {
     @apply antialiased;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
   }
   body {
     @apply bg-zinc-50 text-zinc-900 font-sans transition-colors;
@@ -187,9 +191,18 @@
 .dark .hover\:bg-zinc-50:hover { background-color: var(--color-zinc-800); }
 .dark .hover\:bg-zinc-100:hover { background-color: var(--color-zinc-800); }
 .dark .hover\:text-zinc-900:hover { color: var(--color-zinc-100); }
+.dark .active\:bg-zinc-50:active { background-color: var(--color-zinc-800); }
+.dark .bg-white\/85 { background-color: color-mix(in oklab, var(--color-zinc-950) 85%, transparent); }
+.dark .bg-white\/95 { background-color: color-mix(in oklab, var(--color-zinc-950) 95%, transparent); }
 .dark .text-red-600 { color: var(--color-red-400); }
+.dark .bg-amber-50 { background-color: color-mix(in oklab, var(--color-amber-950) 60%, transparent); }
 .dark .bg-amber-50\/50 { background-color: color-mix(in oklab, var(--color-amber-950) 50%, transparent); }
+.dark .bg-amber-50\/60 { background-color: color-mix(in oklab, var(--color-amber-950) 60%, transparent); }
 .dark .border-amber-200 { border-color: var(--color-amber-900); }
+.dark .text-amber-900 { color: var(--color-amber-200); }
+.dark .text-amber-800 { color: var(--color-amber-200); }
+.dark .text-amber-700 { color: var(--color-amber-300); }
+.dark .text-emerald-700 { color: var(--color-emerald-300); }
 .dark .bg-red-50 { background-color: color-mix(in oklab, var(--color-red-950) 60%, transparent); }
 .dark .border-red-100 { border-color: var(--color-red-900); }
 .dark .text-red-700 { color: var(--color-red-300); }

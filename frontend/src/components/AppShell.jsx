@@ -3,7 +3,7 @@ import { Bell, CalendarDays, ClipboardList, FilePlus2, History, House, LayoutDas
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNotifications } from '../context/NotificationsContext.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
-import logo from '../assets/logo.png'
+import BrandLogo from './BrandLogo.jsx'
 
 function initials(name = '') {
   return name
@@ -34,7 +34,7 @@ const ADMIN_NAV = [
   { to: '/admin/logs', label: 'Logs', icon: History },
 ]
 
-const WIDE_ROUTES = ['/admin/products', '/admin/users', '/admin/problems', '/admin/logs']
+const WIDE_ROUTES = ['/admin/products', '/admin/users', '/admin/problems', '/admin/logs', '/admin/assignments']
 
 export default function AppShell() {
   const { user, logout } = useAuth()
@@ -57,7 +57,7 @@ export default function AppShell() {
   return (
     <div className="min-h-svh bg-zinc-50">
       <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-60 bg-white border-r border-zinc-200 flex-col p-4 z-30">
-        <img src={logo} alt="Blaupunkt" className="h-6 self-start" />
+        <BrandLogo className="h-6 self-start" />
         <nav className="mt-8 flex flex-col gap-1 flex-1">
           {nav.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `navlink ${isActive ? 'navlink-active' : ''}`}>
@@ -68,7 +68,7 @@ export default function AppShell() {
         </nav>
         <div className="divider my-3" />
         <div className="flex items-center gap-2.5 px-1 py-1">
-          <div className="w-9 h-9 rounded-full bg-zinc-900 text-white grid place-items-center text-xs font-semibold">{initials(user?.name)}</div>
+          <div className="w-9 h-9 rounded-full bg-zinc-900 text-white grid place-items-center text-xs font-semibold dark:bg-zinc-100 dark:text-zinc-900">{initials(user?.name)}</div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-zinc-900 truncate">{user?.name}</p>
             <p className="text-[11px] text-zinc-500 capitalize">{user?.role}</p>
@@ -81,9 +81,9 @@ export default function AppShell() {
       </aside>
 
       <div className="md:pl-60">
-        <header className="sticky top-0 z-30 bg-white/85 backdrop-blur border-b border-zinc-200 md:hidden">
+        <header className="sticky top-0 z-30 bg-white/85 dark:bg-zinc-950/85 backdrop-blur border-b border-zinc-200 md:hidden">
           <div className="h-14 flex items-center gap-3 px-4">
-            <img src={logo} alt="Blaupunkt" className="h-5" />
+            <BrandLogo className="h-5" />
             <div className="ml-auto flex items-center gap-1">
               <ThemeToggle />
               <NavLink to="/notifications" className="relative p-2.5 rounded-xl text-zinc-700 hover:bg-zinc-100" aria-label="Notifications">
@@ -101,7 +101,7 @@ export default function AppShell() {
           <div className="card flex items-center gap-2 px-3 py-1.5">
             <NavLink to="/notifications" className="relative p-1 rounded-lg text-zinc-700 hover:bg-zinc-100" aria-label="Notifications">
               <Bell size={17} />
-              {unread > 0 && <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-0.5 rounded-full bg-zinc-900 text-white text-[9px] font-semibold grid place-items-center">{unread > 9 ? '9+' : unread}</span>}
+              {unread > 0 && <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-0.5 rounded-full bg-zinc-900 text-white text-[9px] font-semibold grid place-items-center dark:bg-zinc-100 dark:text-zinc-900">{unread > 9 ? '9+' : unread}</span>}
             </NavLink>
             <span className="chip capitalize">{user?.role}</span>
           </div>
@@ -112,7 +112,7 @@ export default function AppShell() {
         </main>
       </div>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-zinc-200" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur border-t border-zinc-200" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="grid grid-cols-5">
           {TECH_NAV.map((item) => (
             <NavLink
@@ -122,7 +122,15 @@ export default function AppShell() {
               className={({ isActive }) => `flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium min-h-[54px] ${isActive ? 'text-accent' : 'text-zinc-400'}`}
             >
               {({ isActive }) => (
-                <span className={item.to === '/new' ? (isActive ? 'text-white bg-zinc-900 p-1 rounded-xl' : 'text-zinc-900 bg-zinc-100 p-1 rounded-xl') : ''}>
+                <span
+                  className={
+                    item.to === '/new'
+                      ? isActive
+                        ? 'text-white bg-zinc-900 p-1 rounded-xl dark:bg-zinc-100 dark:text-zinc-900'
+                        : 'text-zinc-900 bg-zinc-100 p-1 rounded-xl dark:text-zinc-100 dark:bg-zinc-800'
+                      : ''
+                  }
+                >
                   <item.icon size={20} />
                 </span>
               )}

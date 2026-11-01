@@ -2,7 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
 import AppShell from './components/AppShell.jsx'
-import logo from './assets/logo.png'
+import BrandLogo from './components/BrandLogo.jsx'
 import Forbidden from './pages/Forbidden.jsx'
 import Page404 from './pages/Page404.jsx'
 import SuperAdminOnly from './pages/SuperAdminOnly.jsx'
@@ -32,7 +32,7 @@ const AdminRecovery = lazy(() => import('./pages/AdminRecovery.jsx'))
 function Splash() {
   return (
     <div className="min-h-svh grid place-items-center bg-zinc-50">
-      <img src={logo} alt="Blaupunkt" className="h-7 animate-pulse" />
+      <BrandLogo className="h-7 animate-pulse" />
     </div>
   )
 }

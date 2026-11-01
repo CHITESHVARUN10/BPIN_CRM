@@ -55,7 +55,7 @@ export default function Profile() {
 
       <div className="card p-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-zinc-900 text-white grid place-items-center text-sm font-semibold">
+          <div className="w-12 h-12 rounded-full bg-zinc-900 text-white grid place-items-center text-sm font-semibold dark:bg-zinc-100 dark:text-zinc-900">
             {user?.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('')}
           </div>
           <div>

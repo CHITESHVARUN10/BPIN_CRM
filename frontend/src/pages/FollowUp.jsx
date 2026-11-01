@@ -184,8 +184,8 @@ export default function FollowUp() {
   if (done) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
-        <div className="w-14 h-14 rounded-full bg-zinc-900 grid place-items-center">
-          <Check size={26} className="text-white" strokeWidth={2.5} />
+        <div className="w-14 h-14 rounded-full bg-zinc-900 grid place-items-center dark:bg-zinc-100">
+          <Check size={26} className="text-white dark:text-zinc-900" strokeWidth={2.5} />
         </div>
         <h1 className="mt-5 text-lg font-semibold tracking-tight">{done.status === 'closed' ? 'Record closed' : 'Follow-up added'}</h1>
         <p className="mt-1 text-[13px] text-zinc-500">Token {done.tokenNo}</p>

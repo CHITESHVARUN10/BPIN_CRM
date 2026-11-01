@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarSearch, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import api from '../api/client.js'
+import PeriodPicker from '../components/PeriodPicker.jsx'
 import ProductSelect from '../components/ProductSelect.jsx'
 import { EmptyState, SkeletonRows, formatDate } from '../components/ui.jsx'
+import { isoDate, periodLabel, periodSubtitle, rangeForMode } from '../utils/periods.js'
 
 export default function AdminRecords() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [mode, setMode] = useState('day')
+  const [anchor, setAnchor] = useState(() => new Date())
+  const range = useMemo(() => rangeForMode(mode, anchor), [mode, anchor])
   const [technician, setTechnician] = useState('')
   const [problem, setProblem] = useState('')
   const [product, setProduct] = useState(null)
@@ -34,8 +38,8 @@ export default function AdminRecords() {
       const res = await api.get('/records/my', {
         params: {
           page: pageNum,
-          from: date,
-          to: date,
+          from: isoDate(range.from),
+          to: isoDate(range.to),
           technician: technician || undefined,
           problem: problem || undefined,
           sku: product?.sku || undefined,
@@ -52,36 +56,31 @@ export default function AdminRecords() {
     } finally {
       setLoading(false)
     }
-  }, [date, technician, problem, product, status, q])
+  }, [range, technician, problem, product, status, q])
 
   useEffect(() => {
     const t = setTimeout(() => load(1), q ? 350 : 0)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, technician, problem, product, status, q])
+  }, [range, technician, problem, product, status, q])
+
+  const changeMode = (next) => {
+    if (next === mode) return
+    setMode(next)
+    setAnchor(new Date())
+  }
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Records</h1>
-          <p className="text-[13px] text-zinc-500 mt-0.5">All assessments for a single day · downloads live in Reports</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            className="input !min-h-[40px] !w-auto text-[13px]"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-          {date !== new Date().toISOString().slice(0, 10) ? (
-            <button type="button" className="btn btn-sm btn-outline" onClick={() => setDate(new Date().toISOString().slice(0, 10))}>
-              <CalendarSearch size={14} />
-              Today
-            </button>
-          ) : null}
-        </div>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Records</h1>
+        <p className="text-[13px] text-zinc-500 mt-0.5">
+          {loading ? 'Assessments for the selected period' : `${total} record${total === 1 ? '' : 's'} · ${periodSubtitle(mode, anchor)}`}
+          {' · '}downloads live in Reports
+        </p>
       </div>
+
+      <PeriodPicker mode={mode} anchor={anchor} onModeChange={changeMode} onAnchorChange={setAnchor} />
 
       <div className="flex flex-wrap gap-2 items-end">
         <select className="input !min-h-[40px] !w-auto text-[13px]" value={technician} onChange={(e) => setTechnician(e.target.value)}>
@@ -116,7 +115,7 @@ export default function AdminRecords() {
       {loading ? (
         <SkeletonRows rows={5} className="h-16" />
       ) : items.length === 0 ? (
-        <EmptyState title={`No records on ${formatDate(date)}`} hint="Try another date or clear the filters." />
+        <EmptyState title={`No records in ${periodLabel(mode, anchor)}`} hint="Try another period or clear the filters." />
       ) : (
         <div className="space-y-2">
           {items.map((r) => (

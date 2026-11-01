@@ -28,7 +28,7 @@ export function ToastProvider({ children }) {
             key={t.id}
             role="status"
             className={`px-4 py-2.5 rounded-full text-sm font-medium shadow-lg max-w-[90vw] truncate ${
-              t.type === 'error' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-white'
+              t.type === 'error' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
             }`}
           >
             {t.message}

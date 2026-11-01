@@ -212,7 +212,7 @@ function YearPanel({ anchor, onSelect }) {
   )
 }
 
-export default function PeriodPicker({ mode, anchor, onModeChange, onAnchorChange, className = '' }) {
+export default function PeriodPicker({ mode, anchor, onModeChange, onAnchorChange, className = '', ariaLabel = 'Period' }) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
   const current = isCurrentPeriod(mode, anchor)
@@ -269,7 +269,7 @@ export default function PeriodPicker({ mode, anchor, onModeChange, onAnchorChang
         speed={1}
         glide={75}
         draggable
-        ariaLabel="Dashboard period"
+        ariaLabel={ariaLabel}
         className="sm:w-[280px]"
       />
 

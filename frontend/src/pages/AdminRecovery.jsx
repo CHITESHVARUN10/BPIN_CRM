@@ -662,7 +662,7 @@ export default function AdminRecovery() {
                 <span className="text-[11px] text-zinc-400 ml-auto">{operation.id}</span>
               </div>
               <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
-                <div className="h-full bg-zinc-900 transition-all" style={{ width: `${Math.max(2, operation.progress || 0)}%` }} />
+                <div className="h-full bg-zinc-900 dark:bg-zinc-100 transition-all" style={{ width: `${Math.max(2, operation.progress || 0)}%` }} />
               </div>
               <p className="text-[12px] text-zinc-500">{operation.phase}</p>
 

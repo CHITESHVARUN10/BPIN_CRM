@@ -48,7 +48,7 @@ export default function Notifications() {
                 onClick={() => open(n)}
                 className={`card p-4 w-full text-left flex gap-3 items-start transition ${n.readAt ? 'opacity-60' : ''}`}
               >
-                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.readAt ? 'bg-zinc-200' : 'bg-zinc-900'}`} />
+                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.readAt ? 'bg-zinc-200 dark:bg-zinc-700' : 'bg-zinc-900 dark:bg-zinc-100'}`} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-zinc-900">{n.title}</p>
                   {n.body ? <p className="mt-0.5 text-[13px] text-zinc-600">{n.body}</p> : null}

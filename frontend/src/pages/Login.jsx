@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import ThemeToggle from '../components/ThemeToggle.jsx'
 import PasswordInput from '../components/PasswordInput.jsx'
-import logo from '../assets/logo.png'
+import BrandLogo from '../components/BrandLogo.jsx'
 
 export default function Login() {
   const { login, user } = useAuth()
@@ -44,7 +44,7 @@ export default function Login() {
           <ThemeToggle />
         </div>
         <div className="flex flex-col items-center pb-7">
-          <img src={logo} alt="Blaupunkt" className="h-8" />
+          <BrandLogo className="h-8" />
           <p className="mt-4 text-[13px] text-zinc-500">Service engineer portal</p>
         </div>
         <form onSubmit={onSubmit} className="card p-5">
