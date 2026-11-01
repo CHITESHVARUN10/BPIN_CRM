@@ -243,7 +243,7 @@ export default function AdminAssignments() {
             hint={hasFilters ? 'Try clearing the filters or choosing another date.' : 'Use the create section above to hand out the first visit.'}
           />
         ) : (
-          <div className="card overflow-x-auto">
+          <div className="card overflow-x-auto scroll-smooth">
             <table className="data-table min-w-[1120px]">
               <thead>
                 <tr>
