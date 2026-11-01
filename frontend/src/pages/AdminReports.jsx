@@ -174,7 +174,14 @@ export default function AdminReports() {
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {items.map((r) => (
-                <tr key={r._id} onClick={() => navigate(`/admin/reports/${r._id}`)} className="hover:bg-zinc-50 cursor-pointer">
+                <tr
+                  key={r._id}
+                  onClick={(event) => {
+                    if (event.target.closest('a,button')) return
+                    navigate(`/admin/reports/${r._id}`)
+                  }}
+                  className="hover:bg-zinc-50 cursor-pointer"
+                >
                   <td className="px-3.5 py-2.5">
                     <Link to={`/admin/reports/${r._id}`} className="font-mono font-medium text-zinc-900 hover:underline whitespace-nowrap">
                       {r.tokenNo}

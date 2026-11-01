@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import api from '../api/client.js'
 import PeriodPicker from '../components/PeriodPicker.jsx'
@@ -7,15 +7,34 @@ import ProductSelect from '../components/ProductSelect.jsx'
 import { EmptyState, SkeletonRows, formatDate } from '../components/ui.jsx'
 import { isoDate, periodLabel, periodSubtitle, rangeForMode } from '../utils/periods.js'
 
+const VIEW_KEY = 'bpin:admin-records-view'
+const MODES = ['day', 'week', 'month', 'year']
+
+function readSavedView() {
+  try {
+    const raw = sessionStorage.getItem(VIEW_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 export default function AdminRecords() {
-  const [mode, setMode] = useState('day')
-  const [anchor, setAnchor] = useState(() => new Date())
+  const navigate = useNavigate()
+  const savedView = useMemo(readSavedView, [])
+  const [mode, setMode] = useState(() => (MODES.includes(savedView?.mode) ? savedView.mode : 'day'))
+  const [anchor, setAnchor] = useState(() => {
+    const saved = savedView?.anchor ? new Date(savedView.anchor) : null
+    return saved && !Number.isNaN(saved.getTime()) ? saved : new Date()
+  })
   const range = useMemo(() => rangeForMode(mode, anchor), [mode, anchor])
-  const [technician, setTechnician] = useState('')
-  const [problem, setProblem] = useState('')
-  const [product, setProduct] = useState(null)
-  const [status, setStatus] = useState('')
-  const [q, setQ] = useState('')
+  const [technician, setTechnician] = useState(() => (typeof savedView?.technician === 'string' ? savedView.technician : ''))
+  const [problem, setProblem] = useState(() => (typeof savedView?.problem === 'string' ? savedView.problem : ''))
+  const [product, setProduct] = useState(() => (savedView?.product && typeof savedView.product === 'object' ? savedView.product : null))
+  const [status, setStatus] = useState(() => (typeof savedView?.status === 'string' ? savedView.status : ''))
+  const [q, setQ] = useState(() => (typeof savedView?.q === 'string' ? savedView.q : ''))
   const [techs, setTechs] = useState([])
   const [problems, setProblems] = useState([])
   const [items, setItems] = useState([])
@@ -63,6 +82,25 @@ export default function AdminRecords() {
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, technician, problem, product, status, q])
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        VIEW_KEY,
+        JSON.stringify({
+          mode,
+          anchor: anchor.toISOString(),
+          technician,
+          problem,
+          product,
+          status,
+          q,
+        }),
+      )
+    } catch {
+      // Session storage can be unavailable in private/restricted contexts.
+    }
+  }, [mode, anchor, technician, problem, product, status, q])
 
   const changeMode = (next) => {
     if (next === mode) return
@@ -132,7 +170,14 @@ export default function AdminRecords() {
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r._id}>
+                <tr
+                  key={r._id}
+                  onClick={(event) => {
+                    if (event.target.closest('a,button')) return
+                    navigate(`/admin/reports/${r._id}`)
+                  }}
+                  className="cursor-pointer"
+                >
                   <td>
                     <Link to={`/admin/reports/${r._id}`} className="chip chip-strong font-mono transition hover:opacity-80">
                       {r.tokenNo}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CheckCircle2, ImageOff, Pencil, PlusCircle, RotateCcw } from 'lucide-react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle2, ImageOff, Pencil, PlusCircle, RotateCcw } from 'lucide-react'
 import api from '../api/client.js'
 import { EmptyState, SkeletonRows, formatDate, formatDateTime } from '../components/ui.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -42,6 +42,7 @@ function VideoPlayer({ src, className = '' }) {
 export default function ReportDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
   const pushToast = useToast().push
   const [record, setRecord] = useState(null)
@@ -70,16 +71,33 @@ export default function ReportDetail() {
     return () => window.removeEventListener('keydown', onKey)
   }, [lightbox, record])
 
+  const goBack = () => {
+    if (location.key !== 'default') navigate(-1)
+    else navigate(user?.role === 'admin' ? '/admin/records' : '/records')
+  }
+  const backButton = (
+    <button type="button" onClick={goBack} className="btn btn-sm btn-ghost -ml-2 !px-2" aria-label="Go back">
+      <ArrowLeft size={16} />
+      Back
+    </button>
+  )
+
   if (loading) {
     return (
       <div className="space-y-4">
+        {backButton}
         <div className="skeleton h-6 w-40" />
         <SkeletonRows rows={6} className="h-12" />
       </div>
     )
   }
   if (missing || !record) {
-    return <EmptyState title="Record not found" hint="It may have been removed or you don't have access." />
+    return (
+      <div className="space-y-4">
+        {backButton}
+        <EmptyState title="Record not found" hint="It may have been removed or you don't have access." />
+      </div>
+    )
   }
 
   const allImages = [...photosOf(record.images)]
@@ -103,6 +121,7 @@ export default function ReportDetail() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
+        {backButton}
         <h1 className="chip chip-strong font-mono !text-[12px] !px-2.5 !py-1.5">{record.tokenNo}</h1>
         <StatusChip status={record.status} />
         {record.problem?.isOther ? <span className="chip">Other</span> : null}
